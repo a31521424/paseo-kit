@@ -1,6 +1,7 @@
 {
   "id": "host-monitor",
   "name": "Host monitor",
+  "description": "CPU, memory and network usage of the daemon host in the sidebar footer",
   "media": [],
   "requirements": {
     "paseo": ">=0.11.1"

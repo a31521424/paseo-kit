@@ -2,6 +2,13 @@
   "name": "host-monitor",
   "private": true,
   "version": "0.0.0",
+  "description": "CPU, memory and network usage of the daemon host in the sidebar footer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a31521424/paseo-kit.git",
+    "directory": "plugins/host-monitor"
+  },
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",

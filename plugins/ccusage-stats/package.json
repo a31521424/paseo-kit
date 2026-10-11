@@ -2,6 +2,13 @@
   "name": "ccusage-stats",
   "private": true,
   "version": "0.0.0",
+  "description": "Token usage and estimated cost of your coding agents, powered by ccusage",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a31521424/paseo-kit.git",
+    "directory": "plugins/ccusage-stats"
+  },
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",

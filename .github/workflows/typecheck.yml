@@ -1,0 +1,30 @@
+name: typecheck
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [host-monitor, ccusage-stats]
+    defaults:
+      run:
+        working-directory: plugins/${{ matrix.plugin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plugins/${{ matrix.plugin }}/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Mobile audit (client/)
+        run: |
+          hits=$(grep -rnE "document\.|window\.|localStorage|navigator\.|className=|onClick=" client/ --include='*.ts' --include='*.tsx' | grep -v '^client/web\.ts:' || true)
+          if [ -n "$hits" ]; then echo "$hits"; exit 1; fi

@@ -1,7 +1,12 @@
 {
   "name": "paseo-kit",
   "private": true,
-  "description": "A collection of Paseo plugins. Each plugin under plugins/ installs its own dependencies.",
+  "description": "A collection of Paseo plugins: host-monitor and ccusage-stats.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a31521424/paseo-kit.git"
+  },
   "scripts": {
     "install:all": "for d in plugins/*/; do (cd \"$d\" && npm install) || exit 1; done",
     "typecheck": "for d in plugins/*/; do echo \"== $d\"; (cd \"$d\" && npm run --silent typecheck) || exit 1; done"
