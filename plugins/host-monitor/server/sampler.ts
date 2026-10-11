@@ -19,7 +19,29 @@ interface NetworkTotals {
   tx: number;
 }
 
+/**
+ * Linux: the aggregate line of /proc/stat. iowait counts as idle; steal counts as busy, since on a
+ * VPS it is CPU time the guest wanted but the hypervisor gave elsewhere. os.cpus() omits both.
+ */
+function readProcCpuTimes(): CpuTimes | null {
+  try {
+    const line = readFileSync("/proc/stat", "utf8").split("\n", 1)[0] ?? "";
+    if (!line.startsWith("cpu ")) return null;
+    // user nice system idle iowait irq softirq steal; guest time is already inside user and nice.
+    const [user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0] = line
+      .trim()
+      .split(/\s+/)
+      .slice(1)
+      .map(Number);
+    return { idle: idle + iowait, total: user + nice + system + idle + iowait + irq + softirq + steal };
+  } catch {
+    return null;
+  }
+}
+
 function readCpuTimes(): CpuTimes {
+  const proc = readProcCpuTimes();
+  if (proc) return proc;
   let idle = 0;
   let total = 0;
   for (const cpu of os.cpus()) {

@@ -36,3 +36,12 @@ export function formatUptime(seconds: number): string {
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
+
+/** "0%", "0.4%", "37%": one decimal below 10, so a nearly idle host does not read as zero. */
+export function formatPercent(percent: number): string {
+  const value = Math.min(Math.max(percent, 0), 100);
+  if (value < 0.05) return "0%";
+  // 9.95 and up would print as "10.0"; keep the text within the "100%" slot.
+  if (value < 9.95) return `${value.toFixed(1)}%`;
+  return `${Math.round(value)}%`;
+}

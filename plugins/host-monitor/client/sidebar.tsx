@@ -10,7 +10,7 @@ import {
   type PressableStateCallbackType,
 } from "react-native";
 import type { hostStatsRpc } from "../shared/stats";
-import { formatBytes, formatCompactRate, formatRate, formatUptime } from "./format";
+import { formatBytes, formatCompactRate, formatPercent, formatRate, formatUptime } from "./format";
 import { Sparkline, loadColor, scaleToPeak, useHostStats } from "./stats";
 
 // Geometry follows the built-in usage summary in the same footer.
@@ -21,6 +21,9 @@ const METRIC_GAP = 10;
 const MIN_METER_WIDTH = 16;
 const METER_GAP = 4;
 const METER_COUNT = 2;
+const METER_HEIGHT = 6;
+// A load above zero always shows a sliver, so a nearly idle meter is not mistaken for an empty one.
+const MIN_FILL_WIDTH = 2;
 
 type HostStats = RpcOutput<typeof hostStatsRpc>;
 
@@ -38,8 +41,8 @@ function metricsOf(stats: HostStats): Metric[] {
   const { current, memory, network } = stats;
   const memoryPercent = (memory.usedBytes / memory.totalBytes) * 100;
   const metrics: Metric[] = [
-    { icon: "Cpu", text: `${Math.round(current.cpuPercent)}%`, percent: current.cpuPercent },
-    { icon: "MemoryStick", text: `${Math.round(memoryPercent)}%`, percent: memoryPercent },
+    { icon: "Cpu", text: formatPercent(current.cpuPercent), percent: current.cpuPercent },
+    { icon: "MemoryStick", text: formatPercent(memoryPercent), percent: memoryPercent },
   ];
   if (network) {
     metrics.push(
@@ -90,9 +93,12 @@ function MetricLine({
               flexShrink: 1,
               flexBasis: 0,
               minWidth: MIN_METER_WIDTH,
-              height: 6,
+              height: METER_HEIGHT,
               marginLeft: ICON_GAP,
-              borderRadius: 3,
+              borderRadius: METER_HEIGHT / 2,
+              // The outline keeps an empty meter visible on surfaces close to the track color.
+              borderWidth: 1,
+              borderColor: theme.colors.border,
               overflow: "hidden",
               backgroundColor: theme.colors.surface2,
             }}
@@ -101,7 +107,7 @@ function MetricLine({
               style={{
                 height: "100%",
                 width: `${Math.min(Math.max(metric.percent ?? 0, 0), 100)}%`,
-                borderRadius: 3,
+                minWidth: (metric.percent ?? 0) > 0 ? MIN_FILL_WIDTH : 0,
                 backgroundColor: loadColor(theme, metric.percent ?? 0),
               }}
             />
@@ -162,8 +168,8 @@ function triggerStyle(theme: PluginTheme) {
 function describe(stats: HostStats): string {
   const { current, memory, network } = stats;
   const parts = [
-    `CPU ${Math.round(current.cpuPercent)}%`,
-    `memory ${Math.round((memory.usedBytes / memory.totalBytes) * 100)}%`,
+    `CPU ${formatPercent(current.cpuPercent)}`,
+    `memory ${formatPercent((memory.usedBytes / memory.totalBytes) * 100)}`,
   ];
   if (network) {
     parts.push(
@@ -288,7 +294,7 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
         theme={theme}
         icon="Cpu"
         label={`CPU · ${data.cpuCount} cores`}
-        value={`${current.cpuPercent.toFixed(0)}%`}
+        value={formatPercent(current.cpuPercent)}
         color={loadColor(theme, current.cpuPercent)}
         values={history.map((s) => s.cpuPercent)}
       />
@@ -296,7 +302,7 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
         theme={theme}
         icon="MemoryStick"
         label={`RAM · ${formatBytes(memory.usedBytes)} / ${formatBytes(memory.totalBytes)}`}
-        value={`${memoryPercent.toFixed(0)}%`}
+        value={formatPercent(memoryPercent)}
         color={loadColor(theme, memoryPercent)}
         values={history.map((s) => s.memoryPercent)}
       />
