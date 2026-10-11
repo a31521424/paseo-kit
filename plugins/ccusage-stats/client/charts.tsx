@@ -171,13 +171,16 @@ export function PaceBar({
         style={{
           height,
           borderRadius: height / 2,
+          // Outlined like host-monitor's meters, so the empty part of the track reads as a track.
+          borderWidth: 1,
+          borderColor: theme.colors.border,
           overflow: "hidden",
           backgroundColor: theme.colors.surface2,
         }}
       >
         {total > 0 ? (
           <View style={{ width: `${(total / scale) * 100}%`, minWidth: 2 }}>
-            <ShareBar theme={theme} segments={segments} height={height} />
+            <ShareBar theme={theme} segments={segments} height={height - 2} />
           </View>
         ) : null}
       </View>
