@@ -1,0 +1,8 @@
+{
+  "id": "host-monitor",
+  "name": "Host monitor",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.11.1"
+  }
+}

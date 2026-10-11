@@ -1,0 +1,8 @@
+{
+  "id": "ccusage-stats",
+  "name": "Token usage",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.11.1"
+  }
+}
