@@ -2,6 +2,8 @@
 
 [English](README.md) | 简体中文
 
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 [Paseo](https://paseo.sh) 插件合集。每个插件位于 `plugins/<id>/`，是一个完整、独立的 Paseo 插件项目。
 
 ## 插件
@@ -33,6 +35,45 @@
 - Paseo **0.11.1** 及以上（daemon 和 app）。
 - daemon 已开启插件：**Settings → Plugins → Enable plugins**，或在 daemon 的 `config.json` 中设置 `"pluginsEnabled": true` 后执行 `paseo reload`。
 - daemon 主机上有 Node.js 和 npm（用于安装依赖）。
+
+## 依赖
+
+本仓库不内嵌任何第三方代码。依赖在各插件的 `plugins/<id>/package.json` 中声明，并由提交的 `package-lock.json` 锁定版本。
+
+**运行环境**
+
+| 依赖 | 版本 | 说明 |
+| --- | --- | --- |
+| [Paseo](https://github.com/getpaseo/paseo) daemon 与 app | >= 0.11.1 | 在各 `paseo-plugin.json` 的 `requirements.paseo` 中声明。 |
+| Node.js 与 npm | 建议 Node 22+ | 位于 daemon 主机，用于安装依赖和执行 `ccusage-stats` 的 build 步骤。 |
+| Linux `/proc` | - | `host-monitor` 的网速与可用内存。其他系统只显示 CPU 和内存。 |
+
+**运行时 npm 依赖**（随插件安装）
+
+| 包 | 版本 | 许可证 | 使用者 |
+| --- | --- | --- | --- |
+| [`ccusage`](https://github.com/ccusage/ccusage) | 20.0.29 | MIT | `ccusage-stats` |
+| `@ccusage/ccusage-<platform>-<arch>` | 20.0.29 | MIT | `ccusage-stats`（原生二进制，`ccusage` 的可选依赖） |
+
+`host-monitor` 没有运行时 npm 依赖。
+
+**运行时由 Paseo 提供**（列在 `devDependencies` 中，本地安装仅用于类型检查）
+
+| 包 | 版本 | 许可证 |
+| --- | --- | --- |
+| [`@getpaseo/plugin`](https://github.com/getpaseo/paseo) | 0.11.1 | Apache-2.0（Paseo） |
+| `react` | 19.1.0 | MIT |
+| `react-native` | 0.81.5 | MIT |
+| `@tanstack/react-query` | ^5.90.11 | MIT |
+| `zod` | ^4.4.3 | MIT |
+
+**仅开发使用**
+
+| 包 | 版本 | 许可证 |
+| --- | --- | --- |
+| `typescript` | ^5.9.3 | Apache-2.0 |
+| `@types/node` | ^22.0.0 | MIT |
+| `@types/react` | ~19.2.0 | MIT |
 
 ## 安装
 
@@ -113,4 +154,4 @@ Paseo 插件是**受信任、无沙箱**的代码。服务端代码作为 daemon
 
 ## 许可证
 
-[MIT](LICENSE)
+采用 [Apache License 2.0](LICENSE)，与 [Paseo](https://github.com/getpaseo/paseo) 一致，另见 [NOTICE](NOTICE)。第三方依赖遵循各自的许可证，见上方[依赖](#依赖)一节。

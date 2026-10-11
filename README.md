@@ -1,7 +1,7 @@
 # paseo-kit
 
 [![typecheck](https://github.com/a31521424/paseo-kit/actions/workflows/typecheck.yml/badge.svg)](https://github.com/a31521424/paseo-kit/actions/workflows/typecheck.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 English | [简体中文](README.zh-CN.md)
 
@@ -40,6 +40,46 @@ See each plugin's `OVERVIEW.md` for details and limits.
 - Plugins enabled on the daemon: **Settings → Plugins → Enable plugins**, or `"pluginsEnabled": true`
   in the daemon's `config.json` followed by `paseo reload`.
 - Node.js with npm on the daemon host (for installing dependencies).
+
+## Dependencies
+
+paseo-kit does not vendor any third-party code. Dependencies are declared per plugin in
+`plugins/<id>/package.json` and pinned by the committed `package-lock.json`.
+
+**Runtime environment**
+
+| Dependency | Version | Notes |
+| --- | --- | --- |
+| [Paseo](https://github.com/getpaseo/paseo) daemon and app | >= 0.11.1 | Declared as `requirements.paseo` in each `paseo-plugin.json`. |
+| Node.js and npm | Node 22+ recommended | On the daemon host, for installing dependencies and the `ccusage-stats` build step. |
+| Linux `/proc` | - | `host-monitor` network speed and available memory. Other systems show CPU and RAM only. |
+
+**Runtime npm dependencies** (installed with the plugin)
+
+| Package | Version | License | Used by |
+| --- | --- | --- | --- |
+| [`ccusage`](https://github.com/ccusage/ccusage) | 20.0.29 | MIT | `ccusage-stats` |
+| `@ccusage/ccusage-<platform>-<arch>` | 20.0.29 | MIT | `ccusage-stats` (native binary, optional dependency of `ccusage`) |
+
+`host-monitor` has no runtime npm dependencies.
+
+**Provided by Paseo at runtime** (`devDependencies`, installed locally only for typechecking)
+
+| Package | Version | License |
+| --- | --- | --- |
+| [`@getpaseo/plugin`](https://github.com/getpaseo/paseo) | 0.11.1 | Apache-2.0 (Paseo) |
+| `react` | 19.1.0 | MIT |
+| `react-native` | 0.81.5 | MIT |
+| `@tanstack/react-query` | ^5.90.11 | MIT |
+| `zod` | ^4.4.3 | MIT |
+
+**Development only**
+
+| Package | Version | License |
+| --- | --- | --- |
+| `typescript` | ^5.9.3 | Apache-2.0 |
+| `@types/node` | ^22.0.0 | MIT |
+| `@types/react` | ~19.2.0 | MIT |
 
 ## Install
 
@@ -134,4 +174,6 @@ and never log them from plugin code.
 
 ## License
 
-[MIT](LICENSE)
+Licensed under the [Apache License, Version 2.0](LICENSE), the same license as
+[Paseo](https://github.com/getpaseo/paseo). See [NOTICE](NOTICE). Third-party dependencies keep their
+own licenses, listed under [Dependencies](#dependencies).

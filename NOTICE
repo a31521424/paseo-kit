@@ -1,0 +1,14 @@
+paseo-kit
+Copyright (c) 2026-present banbxio
+
+Portions of this software are licensed as follows:
+
+* Third-party components used by paseo-kit remain licensed under the
+  licenses provided by their respective copyright holders. See the
+  "Dependencies" section of README.md.
+* Except for those third-party components, paseo-kit is licensed under the
+  Apache License, Version 2.0, found in the LICENSE file. This matches the
+  license of Paseo (https://github.com/getpaseo/paseo).
+
+paseo-kit is an independent project and is not affiliated with or endorsed by
+the Paseo authors.

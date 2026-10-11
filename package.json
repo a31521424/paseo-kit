@@ -2,7 +2,7 @@
   "name": "paseo-kit",
   "private": true,
   "description": "A collection of Paseo plugins: host-monitor and ccusage-stats.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/a31521424/paseo-kit.git"
