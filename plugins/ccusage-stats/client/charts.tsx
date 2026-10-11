@@ -143,15 +143,69 @@ export function ShareBar({
   );
 }
 
+/**
+ * Today against a typical day: the fill is today's total, split by agent, and a tick marks the
+ * average. The track spans twice the average, so the tick sits mid-track until today passes
+ * double; then the track stretches to today and the tick slides left. A default average gets a
+ * muted tick, since it says nothing about this machine. Segments and average share one unit.
+ */
+export function PaceBar({
+  theme,
+  segments,
+  average,
+  estimated = false,
+  height = 6,
+}: {
+  theme: PluginTheme;
+  segments: readonly ShareSegment[];
+  average: number;
+  estimated?: boolean;
+  height?: number;
+}) {
+  const total = segments.reduce((sum, segment) => sum + Math.max(segment.value, 0), 0);
+  const scale = Math.max(total, average * 2, 1);
+  const tickHeight = height + 4;
+  return (
+    <View style={{ height: tickHeight, justifyContent: "center" }}>
+      <View
+        style={{
+          height,
+          borderRadius: height / 2,
+          overflow: "hidden",
+          backgroundColor: theme.colors.surface2,
+        }}
+      >
+        {total > 0 ? (
+          <View style={{ width: `${(total / scale) * 100}%`, minWidth: 2 }}>
+            <ShareBar theme={theme} segments={segments} height={height} />
+          </View>
+        ) : null}
+      </View>
+      <View
+        style={{
+          position: "absolute",
+          left: `${(average / scale) * 100}%`,
+          width: 2,
+          height: tickHeight,
+          marginLeft: -1,
+          borderRadius: 1,
+          backgroundColor: estimated ? theme.colors.foregroundMuted : theme.colors.foreground,
+        }}
+      />
+    </View>
+  );
+}
+
 export function agentSegments(
   theme: PluginTheme,
   order: readonly string[],
   period: UsagePeriod | undefined,
+  measure: "totalTokens" | "cost" = "totalTokens",
 ): ShareSegment[] {
   if (!period) return [];
   return foldAgents(period.agents, order).map((agent) => ({
     key: agent.agent,
-    value: agent.usage.totalTokens,
+    value: agent.usage[measure],
     swatch: agentSwatch(theme, order, agent.agent),
   }));
 }

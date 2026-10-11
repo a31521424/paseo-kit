@@ -10,9 +10,15 @@ import {
   type PressableStateCallbackType,
 } from "react-native";
 import type { PeriodKind } from "../shared/usage";
-import { agentSegments, Legend, PERIOD_OPTIONS, PeriodBars, Segmented, ShareBar } from "./charts";
-import { useUsageReport, type UsageReport } from "./data";
-import { formatAgo, formatCost, formatTokens } from "./format";
+import { agentSegments, Legend, PaceBar, PERIOD_OPTIONS, PeriodBars, Segmented } from "./charts";
+import {
+  AVERAGE_DAYS,
+  typicalDay,
+  useUsageReport,
+  type TypicalDay,
+  type UsageReport,
+} from "./data";
+import { formatAgo, formatCost, formatPercent, formatTokens } from "./format";
 import { AgentList, FONT, Headline } from "./summary";
 
 // Geometry follows the built-in usage summary and host-monitor in the same footer.
@@ -57,9 +63,14 @@ export function UsageSidebarItem({ theme, openPopover }: PluginSidebarItemProps)
   // Like the built-in usage summary: nothing until there is something to show.
   if (!data && !error) return null;
   const today = data ? todayOf(data) : undefined;
+  const typical = data ? typicalDay(data.daily) : null;
   const width = available ?? WIDTH_FOR_COST;
+  const pace =
+    today && typical && !typical.estimated
+      ? `, ${formatPercent(today.usage.cost / typical.cost)} of a typical day`
+      : "";
   const label = today
-    ? `Token usage today: ${formatTokens(today.usage.totalTokens)} tokens, ${formatCost(today.usage.cost)}`
+    ? `Token usage today: ${formatTokens(today.usage.totalTokens)} tokens${pace}, ${formatCost(today.usage.cost)}`
     : "Token usage unavailable";
 
   return (
@@ -80,7 +91,7 @@ export function UsageSidebarItem({ theme, openPopover }: PluginSidebarItemProps)
         }}
       >
         <Icon name="Coins" size={ICON_SIZE} color={theme.colors.foregroundMuted} />
-        {today && data ? (
+        {today && data && typical ? (
           <>
             <Text
               numberOfLines={1}
@@ -95,7 +106,12 @@ export function UsageSidebarItem({ theme, openPopover }: PluginSidebarItemProps)
             </Text>
             {width >= WIDTH_FOR_METER ? (
               <View style={{ flex: 1, minWidth: MIN_METER_WIDTH, marginLeft: TEXT_GAP }}>
-                <ShareBar theme={theme} segments={agentSegments(theme, data.agents, today)} />
+                <PaceBar
+                  theme={theme}
+                  segments={agentSegments(theme, data.agents, today, "cost")}
+                  average={typical.cost}
+                  estimated={typical.estimated}
+                />
               </View>
             ) : (
               <View style={{ flex: 1 }} />
@@ -159,6 +175,7 @@ export function UsagePopover({ theme, layout, openScreen }: PluginPopoverProps) 
   }
 
   const periods = data[kind].slice(-POPOVER_PERIODS[kind]);
+  const typical = typicalDay(data.daily);
   const selected = picked !== null && picked < periods.length ? picked : periods.length - 1;
   const changeKind = (next: PeriodKind) => {
     setKind(next);
@@ -180,6 +197,11 @@ export function UsagePopover({ theme, layout, openScreen }: PluginPopoverProps) 
         />
       </View>
       <Headline theme={theme} kind={kind} periods={periods} index={selected} heroSize={22} />
+      {kind === "daily" ? (
+        <Text style={{ fontSize: FONT.caption, color: theme.colors.foregroundMuted }}>
+          {typicalCaption(typical)}
+        </Text>
+      ) : null}
       <PeriodBars
         theme={theme}
         kind={kind}
@@ -196,6 +218,14 @@ export function UsagePopover({ theme, layout, openScreen }: PluginPopoverProps) 
       <Footer theme={theme} report={data} onMore={() => openScreen({ screenId: "usage" })} />
     </View>
   );
+}
+
+function typicalCaption(typical: TypicalDay): string {
+  const cost = formatCost(typical.cost);
+  if (typical.estimated) {
+    return `Typical day: ${cost} at API prices, a default until there is usage history`;
+  }
+  return `Typical day: ${cost} at API prices, averaged over active days in the last ${AVERAGE_DAYS}`;
 }
 
 function Footer({

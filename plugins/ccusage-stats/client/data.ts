@@ -7,6 +7,7 @@ import {
   usageReportRpc,
   type AgentUsage,
   type Usage,
+  type UsagePeriod,
 } from "../shared/usage";
 
 // The daemon caches ccusage's report and refreshes it after each finished turn; polling only
@@ -36,6 +37,33 @@ export function useSessionUsage(agentId: string) {
     },
     refetchInterval: SESSION_REFRESH_MS,
   });
+}
+
+// Days before today that define a typical day for the sidebar meter.
+export const AVERAGE_DAYS = 14;
+// With no history, the typical day follows SemiAnalysis's subscription limit tests: a $200 Claude
+// plan holds about $4,970 of API-equivalent value a month, and 20% is a realistic utilization.
+export const DEFAULT_TYPICAL_COST = (4970 * 0.2) / 30;
+
+/** A typical day in API-equivalent dollars, the same measure ccusage's cost is in. */
+export interface TypicalDay {
+  cost: number;
+  /** True when there is no recent history and the default stands in. */
+  estimated: boolean;
+}
+
+/**
+ * Average cost per active day over the AVERAGE_DAYS before today. Idle days are skipped so
+ * weekends and time off do not drag the typical day down. Cost rather than tokens, because cache
+ * reads dominate token counts while costing next to nothing.
+ */
+export function typicalDay(daily: readonly UsagePeriod[]): TypicalDay {
+  const active = daily.slice(-AVERAGE_DAYS - 1, -1).filter((day) => day.usage.cost > 0);
+  if (active.length === 0) return { cost: DEFAULT_TYPICAL_COST, estimated: true };
+  return {
+    cost: active.reduce((sum, day) => sum + day.usage.cost, 0) / active.length,
+    estimated: false,
+  };
 }
 
 /** Named series before the rest fold into "Other". */
