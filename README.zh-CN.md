@@ -77,6 +77,19 @@
 
 ## 安装
 
+### 让 Agent 安装
+
+把下面这段提示词复制给运行在目标机器上的 Paseo agent，它会从 GitHub 安装或更新两个插件。只想装其中一个时，把第 3 步里另一个 ID 删掉即可。
+
+```text
+请在本机的 Paseo daemon 上安装 https://github.com/a31521424/paseo-kit 中的 Paseo 插件。全程不要重启 Paseo daemon，否则会杀掉正在运行的 agent。
+1. 执行 `paseo --version`，版本必须 ≥ 0.11.1。执行 `npm --version`，npm 必须在 daemon 的 PATH 中，因为 ccusage-stats 安装时会执行 `npm ci --omit=dev`。
+2. 从 `paseo daemon status --json` 取得 `home`，读取 `<home>/config.json` 中的 `pluginsEnabled`（缺失视为 false）。如果不是 true，先停下来征求我的同意，并提醒我：插件是受信任、无沙箱的代码，可以访问这台机器。我同意后，只把该字段设为 true，保留文件其余内容，然后执行 `paseo reload --json`。
+3. 执行 `paseo plugin ls`。对 `host-monitor` 和 `ccusage-stats` 两个 ID 分别处理：未安装则执行 `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`；SOURCE 已经是本 GitHub 仓库则执行 `paseo plugin update <id> --yes`；从其他来源安装的，先问我再决定是否删除重装。
+4. 执行 `paseo plugin ls`，两个插件都必须是 `running` 且没有错误。失败时把错误信息和 `paseo plugin logs <id>` 的输出给我。
+5. 汇报每个插件的 SOURCE 和 REVISION。
+```
+
 ### 从 GitHub 安装
 
 ```bash

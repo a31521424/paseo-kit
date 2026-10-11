@@ -83,6 +83,20 @@ paseo-kit does not vendor any third-party code. Dependencies are declared per pl
 
 ## Install
 
+### Install with an agent
+
+Copy this prompt into a Paseo agent running on the target machine. It installs or updates both
+plugins from GitHub. To install only one, remove the other ID from step 3.
+
+```text
+Install the paseo-kit Paseo plugins from https://github.com/a31521424/paseo-kit on this machine's Paseo daemon. Never restart the Paseo daemon; it would kill running agents.
+1. Run `paseo --version` and require 0.11.1 or later. Run `npm --version`; npm must be on the daemon's PATH because ccusage-stats runs `npm ci --omit=dev` when it installs.
+2. Get `home` from `paseo daemon status --json` and read `pluginsEnabled` in `<home>/config.json` (missing means false). If it is not true, stop and ask me before enabling it, and warn me that plugins are trusted, unsandboxed code with access to this machine. If I agree, set only that field to true, keep the rest of the file, and run `paseo reload --json`.
+3. Run `paseo plugin ls`. For each ID in `host-monitor` and `ccusage-stats`: if it is not installed, run `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`; if its SOURCE is already this GitHub repository, run `paseo plugin update <id> --yes`; if it is installed from any other source, ask me before removing and reinstalling it.
+4. Run `paseo plugin ls` and require both plugins to be `running` with no error. If one fails, show me its error and `paseo plugin logs <id>`.
+5. Report each plugin's SOURCE and REVISION.
+```
+
 ### From GitHub
 
 ```bash
