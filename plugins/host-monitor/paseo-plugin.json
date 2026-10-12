@@ -1,7 +1,7 @@
 {
   "id": "host-monitor",
   "name": "Host monitor",
-  "description": "CPU, memory and network usage of the daemon host in the sidebar footer",
+  "description": "CPU, memory, disk and network usage of the daemon host in the sidebar footer",
   "media": [
     "assets/screenshot.png"
   ],

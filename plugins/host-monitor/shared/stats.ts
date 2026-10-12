@@ -9,6 +9,16 @@ const sampleSchema = z.object({
   txBytesPerSec: z.number(),
 });
 
+const diskSchema = z.object({
+  mount: z.string(),
+  device: z.string(),
+  fsType: z.string(),
+  totalBytes: z.number(),
+  usedBytes: z.number(),
+  /** Free space an unprivileged user can still write; excludes blocks reserved for root. */
+  availableBytes: z.number(),
+});
+
 export const hostStatsRpc = defineRpc({
   name: "host.stats",
   input: z.object({}),
@@ -23,6 +33,7 @@ export const hostStatsRpc = defineRpc({
     network: z
       .object({ rxTotalBytes: z.number(), txTotalBytes: z.number() })
       .nullable(),
+    disks: z.array(diskSchema),
     sampleIntervalMs: z.number(),
     current: sampleSchema,
     history: z.array(sampleSchema),
@@ -30,3 +41,4 @@ export const hostStatsRpc = defineRpc({
 });
 
 export type HostSample = z.infer<typeof sampleSchema>;
+export type DiskUsage = z.infer<typeof diskSchema>;

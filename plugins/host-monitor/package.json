@@ -2,7 +2,7 @@
   "name": "host-monitor",
   "private": true,
   "version": "0.0.0",
-  "description": "CPU, memory and network usage of the daemon host in the sidebar footer",
+  "description": "CPU, memory, disk and network usage of the daemon host in the sidebar footer",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

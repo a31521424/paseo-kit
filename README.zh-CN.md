@@ -10,14 +10,14 @@
 
 | ID | 名称 | 功能 |
 | --- | --- | --- |
-| [`host-monitor`](plugins/host-monitor) | Host monitor | 在侧边栏底部显示 daemon 主机的 CPU、内存和网速，点击查看历史曲线。 |
+| [`host-monitor`](plugins/host-monitor) | Host monitor | 在侧边栏底部显示 daemon 主机的 CPU、内存、磁盘和网速，点击查看历史曲线。 |
 | [`ccusage-stats`](plugins/ccusage-stats) | Token usage | 基于 [ccusage](https://github.com/ccusage/ccusage) 统计编码 agent 的 token 消耗与估算费用：今日总量、按日/周/月分 agent 分析、当前 session 消耗。 |
 
 ### host-monitor
 
-- 侧边栏底部一行：CPU、内存百分比与小进度条，下载 / 上传速度。
-- 超过 70% 变黄，超过 90% 变红；侧边栏较窄时先隐藏网速。
-- 弹出层展示每项指标约三分钟的历史、运行时间和负载。
+- 侧边栏底部一行：CPU、内存、磁盘百分比与小进度条，以及共用一个图标的下载 / 上传速度。
+- 超过 70% 变黄，超过 90% 变红；侧边栏较窄时先隐藏网速，再隐藏磁盘。
+- 弹出层展示每项指标约三分钟的历史、每块本地磁盘的用量、运行时间和负载。
 - daemon 每 2 秒采样一次，历史保存在内存中。网速仅支持 Linux。
 
 ### ccusage-stats
@@ -46,7 +46,7 @@
 | --- | --- | --- |
 | [Paseo](https://github.com/getpaseo/paseo) daemon 与 app | >= 0.11.1 | 在各 `paseo-plugin.json` 的 `requirements.paseo` 中声明。 |
 | Node.js 与 npm | 建议 Node 22+ | 位于 daemon 主机，用于安装依赖和执行 `ccusage-stats` 的 build 步骤。 |
-| Linux `/proc` | - | `host-monitor` 的网速与可用内存。其他系统只显示 CPU 和内存。 |
+| Linux `/proc` | - | `host-monitor` 的网速、可用内存与磁盘列表。其他系统只显示 CPU、内存和根分区。 |
 
 **运行时 npm 依赖**（随插件安装）
 

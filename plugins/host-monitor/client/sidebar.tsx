@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import type { hostStatsRpc } from "../shared/stats";
 import { formatBytes, formatCompactRate, formatPercent, formatRate, formatUptime } from "./format";
-import { Sparkline, loadColor, scaleToPeak, useHostStats } from "./stats";
+import { Meter, Sparkline, diskPercent, loadColor, scaleToPeak, sumDisks, useHostStats } from "./stats";
 
 // Geometry follows the built-in usage summary in the same footer.
 const ICON_SIZE = 14;
@@ -20,35 +20,49 @@ const ICON_GAP = 6;
 const METRIC_GAP = 10;
 const MIN_METER_WIDTH = 16;
 const METER_GAP = 4;
-const METER_COUNT = 2;
 const METER_HEIGHT = 6;
-// A load above zero always shows a sliver, so a nearly idle meter is not mistaken for an empty one.
-const MIN_FILL_WIDTH = 2;
+// Between the download and upload numbers that share one icon.
+const PAIR_SEPARATOR = "/";
+const PAIR_SEPARATOR_WIDTH = 8;
 
 type HostStats = RpcOutput<typeof hostStatsRpc>;
 
-/** Meters when everything fits, else plain numbers, else CPU and RAM alone. */
-type LineLayout = "meters" | "plain" | "compact";
+type MetricKey = "cpu" | "memory" | "disk" | "network";
 
-interface Metric {
-  icon: string;
-  text: string;
-  percent?: number;
-  droppable?: boolean;
+/** Which metrics fit, and whether the percentages get meters. */
+interface LineLayout {
+  shown: readonly Metric[];
+  meters: boolean;
 }
 
+interface Metric {
+  key: MetricKey;
+  icon: string;
+  /** One number, or two (download and upload) sharing the icon. */
+  texts: readonly string[];
+  percent?: number;
+}
+
+// On a narrow sidebar, network goes first, then disk; CPU and RAM always stay.
+const DROP_ORDER: readonly MetricKey[] = ["network", "disk"];
+
 function metricsOf(stats: HostStats): Metric[] {
-  const { current, memory, network } = stats;
+  const { current, memory, network, disks } = stats;
   const memoryPercent = (memory.usedBytes / memory.totalBytes) * 100;
   const metrics: Metric[] = [
-    { icon: "Cpu", text: formatPercent(current.cpuPercent), percent: current.cpuPercent },
-    { icon: "MemoryStick", text: formatPercent(memoryPercent), percent: memoryPercent },
+    { key: "cpu", icon: "Cpu", texts: [formatPercent(current.cpuPercent)], percent: current.cpuPercent },
+    { key: "memory", icon: "MemoryStick", texts: [formatPercent(memoryPercent)], percent: memoryPercent },
   ];
+  if (disks.length > 0) {
+    const { percent } = sumDisks(disks);
+    metrics.push({ key: "disk", icon: "HardDrive", texts: [formatPercent(percent)], percent });
+  }
   if (network) {
-    metrics.push(
-      { icon: "ArrowDown", text: formatCompactRate(current.rxBytesPerSec), droppable: true },
-      { icon: "ArrowUp", text: formatCompactRate(current.txBytesPerSec), droppable: true },
-    );
+    metrics.push({
+      key: "network",
+      icon: "ArrowDownUp",
+      texts: [formatCompactRate(current.rxBytesPerSec), formatCompactRate(current.txBytesPerSec)],
+    });
   }
   return metrics;
 }
@@ -61,21 +75,24 @@ const TEXT_GAP = 4;
 
 function MetricLine({
   theme,
-  metrics,
   layout,
   slotWidth,
 }: {
   theme: PluginTheme;
-  metrics: readonly Metric[];
   layout: LineLayout;
   slotWidth: number;
 }) {
-  const shown = layout === "compact" ? metrics.filter((m) => !m.droppable) : metrics;
-  return shown.map((metric, index) => {
-    const metered = layout === "meters" && metric.percent !== undefined;
+  return layout.shown.map((metric, index) => {
+    const metered = layout.meters && metric.percent !== undefined;
+    const valueColor =
+      metric.percent !== undefined && metric.percent >= 70
+        ? loadColor(theme, metric.percent)
+        : theme.colors.foreground;
+    const textStyle = { color: valueColor, fontSize: FONT_SIZE, fontVariant: ["tabular-nums" as const] };
+    const [first, second] = metric.texts;
     return (
       <View
-        key={metric.icon}
+        key={metric.key}
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -87,68 +104,66 @@ function MetricLine({
       >
         <Icon name={metric.icon} size={ICON_SIZE} color={theme.colors.foregroundMuted} />
         {metered ? (
-          <View
-            style={{
-              flexGrow: 1,
-              flexShrink: 1,
-              flexBasis: 0,
-              minWidth: MIN_METER_WIDTH,
-              height: METER_HEIGHT,
-              marginLeft: ICON_GAP,
-              borderRadius: METER_HEIGHT / 2,
-              // The outline keeps an empty meter visible on surfaces close to the track color.
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              overflow: "hidden",
-              backgroundColor: theme.colors.surface2,
-            }}
-          >
-            <View
-              style={{
-                height: "100%",
-                width: `${Math.min(Math.max(metric.percent ?? 0, 0), 100)}%`,
-                minWidth: (metric.percent ?? 0) > 0 ? MIN_FILL_WIDTH : 0,
-                backgroundColor: loadColor(theme, metric.percent ?? 0),
-              }}
-            />
-          </View>
+          <Meter
+            theme={theme}
+            percent={metric.percent ?? 0}
+            height={METER_HEIGHT}
+            style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: MIN_METER_WIDTH, marginLeft: ICON_GAP }}
+          />
         ) : null}
-        {/* A fixed, right-aligned slot: changing digits never move anything around them. */}
+        {/* Fixed slots: changing digits never move anything around them. A lone number sits
+            right-aligned; a pair hugs the separator between them. */}
         <Text
           numberOfLines={1}
-          style={{
-            width: slotWidth,
-            marginLeft: metered ? METER_GAP : TEXT_GAP,
-            textAlign: "right",
-            color:
-              metric.percent !== undefined && metric.percent >= 70
-                ? loadColor(theme, metric.percent)
-                : theme.colors.foreground,
-            fontSize: FONT_SIZE,
-            fontVariant: ["tabular-nums"],
-          }}
+          style={[textStyle, { width: slotWidth, marginLeft: metered ? METER_GAP : TEXT_GAP, textAlign: "right" }]}
         >
-          {metric.text}
+          {first}
         </Text>
+        {second !== undefined ? (
+          <>
+            <Text
+              style={{
+                width: PAIR_SEPARATOR_WIDTH,
+                textAlign: "center",
+                color: theme.colors.foregroundMuted,
+                fontSize: FONT_SIZE,
+              }}
+            >
+              {PAIR_SEPARATOR}
+            </Text>
+            <Text numberOfLines={1} style={[textStyle, { width: slotWidth, textAlign: "left" }]}>
+              {second}
+            </Text>
+          </>
+        ) : null}
       </View>
     );
   });
 }
 
-/** Width of a meterless line of `count` metrics; depends only on fixed sizes, never on values. */
-function lineWidth(count: number, slotWidth: number): number {
-  return count * (ICON_SIZE + TEXT_GAP + slotWidth) + Math.max(count - 1, 0) * METRIC_GAP;
+/** Width of a meterless line; depends only on fixed sizes, never on values. */
+function lineWidth(metrics: readonly Metric[], slotWidth: number): number {
+  let width = Math.max(metrics.length - 1, 0) * METRIC_GAP;
+  for (const { texts } of metrics) {
+    width += ICON_SIZE + TEXT_GAP + texts.length * slotWidth + (texts.length - 1) * PAIR_SEPARATOR_WIDTH;
+  }
+  return width;
 }
 
+/** Meters when everything fits, else plain numbers; when neither fits, drop a metric and retry. */
 function chooseLayout(available: number | null, metrics: readonly Metric[], slotWidth: number): LineLayout {
-  if (available === null) return "plain";
-  const plain = lineWidth(metrics.length, slotWidth);
-  const meterCount = metrics.filter((m) => m.percent !== undefined).length;
-  if (plain + meterCount * (ICON_GAP + MIN_METER_WIDTH + METER_GAP - TEXT_GAP) <= available) {
-    return "meters";
+  let shown = metrics;
+  if (available === null) return { shown, meters: false };
+  for (const drop of [...DROP_ORDER, null]) {
+    const plain = lineWidth(shown, slotWidth);
+    const meterCount = shown.filter((m) => m.percent !== undefined).length;
+    if (plain + meterCount * (ICON_GAP + MIN_METER_WIDTH + METER_GAP - TEXT_GAP) <= available) {
+      return { shown, meters: true };
+    }
+    if (plain <= available || drop === null) return { shown, meters: false };
+    shown = shown.filter((m) => m.key !== drop);
   }
-  if (plain <= available) return "plain";
-  return "compact";
+  return { shown, meters: false };
 }
 
 function triggerStyle(theme: PluginTheme) {
@@ -166,11 +181,12 @@ function triggerStyle(theme: PluginTheme) {
 }
 
 function describe(stats: HostStats): string {
-  const { current, memory, network } = stats;
+  const { current, memory, network, disks } = stats;
   const parts = [
     `CPU ${formatPercent(current.cpuPercent)}`,
     `memory ${formatPercent((memory.usedBytes / memory.totalBytes) * 100)}`,
   ];
+  if (disks.length > 0) parts.push(`disk ${formatPercent(sumDisks(disks).percent)}`);
   if (network) {
     parts.push(
       `download ${formatRate(current.rxBytesPerSec)}`,
@@ -211,7 +227,7 @@ export function HostStatusItem({ theme, openPopover }: PluginSidebarItemProps) {
         style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", overflow: "hidden" }}
         onLayout={onAvailable}
       >
-        <MetricLine theme={theme} metrics={metrics} layout={layout} slotWidth={slotWidth} />
+        <MetricLine theme={theme} layout={layout} slotWidth={slotWidth} />
       </View>
       {/* Off-screen templates fix the slot width once, independent of live values. */}
       <View
@@ -262,6 +278,56 @@ function PreviewRow({ theme, icon, label, value, color, values }: PreviewRowProp
   );
 }
 
+function DiskSection({ theme, disks }: { theme: PluginTheme; disks: HostStats["disks"] }) {
+  const total = sumDisks(disks);
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: ICON_GAP }}>
+        <Icon name="HardDrive" size={ICON_SIZE} color={theme.colors.foregroundMuted} />
+        <Text style={{ flex: 1, color: theme.colors.foregroundMuted, fontSize: FONT_SIZE }}>
+          Disk · {formatBytes(total.usedBytes)} / {formatBytes(total.totalBytes)}
+        </Text>
+        <Text
+          style={{ color: theme.colors.foreground, fontSize: FONT_SIZE, fontVariant: ["tabular-nums"] }}
+        >
+          {formatPercent(total.percent)}
+        </Text>
+      </View>
+      {/* A single disk is the total itself: its meter, not a repeat of the same numbers. */}
+      {disks.length === 1 ? <Meter theme={theme} percent={total.percent} height={METER_HEIGHT - 2} /> : null}
+      {disks.length > 1 ? disks.map((disk) => {
+        const percent = diskPercent(disk);
+        return (
+          <View key={disk.mount} style={{ gap: 3, paddingLeft: ICON_SIZE + ICON_GAP }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: ICON_GAP }}>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={{ flex: 1, color: theme.colors.foreground, fontSize: FONT_SIZE - 1 }}
+              >
+                {disk.mount}
+              </Text>
+              <Text
+                style={{
+                  color: theme.colors.foregroundMuted,
+                  fontSize: FONT_SIZE - 1,
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {formatBytes(disk.usedBytes)} / {formatBytes(disk.totalBytes)} ·{" "}
+                <Text style={{ color: percent >= 70 ? loadColor(theme, percent) : theme.colors.foreground }}>
+                  {formatPercent(percent)}
+                </Text>
+              </Text>
+            </View>
+            <Meter theme={theme} percent={percent} height={METER_HEIGHT - 2} />
+          </View>
+        );
+      }) : null}
+    </View>
+  );
+}
+
 function HostPopover({ theme, layout }: PluginPopoverProps) {
   const { data } = useHostStats();
   const rootStyle = {
@@ -278,7 +344,7 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
     );
   }
 
-  const { current, history, memory, network } = data;
+  const { current, history, memory, network, disks } = data;
   const memoryPercent = (memory.usedBytes / memory.totalBytes) * 100;
 
   return (
@@ -326,6 +392,7 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
           />
         </>
       ) : null}
+      {disks.length > 0 ? <DiskSection theme={theme} disks={disks} /> : null}
     </View>
   );
 }

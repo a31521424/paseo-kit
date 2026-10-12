@@ -1,13 +1,18 @@
 import { readFileSync } from "node:fs";
+import { statfs } from "node:fs/promises";
 import os from "node:os";
 import type { RpcOutput } from "@getpaseo/plugin";
 import type { hostStatsRpc } from "../shared/stats";
-import type { HostSample } from "../shared/stats";
+import type { DiskUsage, HostSample } from "../shared/stats";
 
 const SAMPLE_INTERVAL_MS = 2000;
+// Disk usage moves slowly; there is no point in asking the kernel every two seconds.
+const DISK_INTERVAL_MS = 30_000;
 const HISTORY_LENGTH = 90;
 // Virtual interfaces mirror traffic already counted on the physical one.
 const IGNORED_INTERFACE = /^(lo|veth|docker|br-|virbr)/;
+// Read-only images (snap packages, CDs) are always full and are not space anyone can run out of.
+const IGNORED_DISK_FS = new Set(["squashfs", "iso9660", "udf", "erofs"]);
 
 interface CpuTimes {
   idle: number;
@@ -82,6 +87,67 @@ function readNetworkTotals(): NetworkTotals | null {
   return { rx, tx };
 }
 
+interface Mount {
+  device: string;
+  mount: string;
+  fsType: string;
+}
+
+/** /proc/mounts writes spaces and other awkward characters as octal escapes, e.g. "\040". */
+function unescapeMountField(field: string): string {
+  return field.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)));
+}
+
+/**
+ * Linux: filesystems backed by a block device, one entry per device. Pseudo and memory-backed
+ * filesystems are not disks, and network mounts are skipped because statfs on a dead server can
+ * hang. A device mounted more than once (bind mounts, btrfs subvolumes) is counted once, under
+ * its shortest mount point. Elsewhere, or when nothing qualifies (a container on overlayfs), the
+ * root filesystem alone.
+ */
+function readLocalMounts(): Mount[] {
+  let raw = "";
+  try {
+    raw = readFileSync("/proc/mounts", "utf8");
+  } catch {
+    // Not Linux: fall back to the root filesystem below.
+  }
+  const byDevice = new Map<string, Mount>();
+  for (const line of raw.split("\n")) {
+    const [device, mount, fsType] = line.split(" ").map(unescapeMountField);
+    if (!device || !mount || !fsType || IGNORED_DISK_FS.has(fsType)) continue;
+    if (!device.startsWith("/dev/") && fsType !== "zfs") continue;
+    const seen = byDevice.get(device);
+    if (!seen || mount.length < seen.mount.length) byDevice.set(device, { device, mount, fsType });
+  }
+  if (byDevice.size === 0) return [{ device: "", mount: "/", fsType: "" }];
+  return [...byDevice.values()].sort((a, b) => a.mount.localeCompare(b.mount));
+}
+
+async function readDisks(): Promise<DiskUsage[]> {
+  const disks = await Promise.all(
+    readLocalMounts().map(async ({ device, mount, fsType }): Promise<DiskUsage | null> => {
+      try {
+        const fs = await statfs(mount);
+        if (fs.blocks === 0) return null;
+        // Like df: used is everything not free, so blocks reserved for root count as neither.
+        const totalBytes = fs.blocks * fs.bsize;
+        return {
+          mount,
+          device,
+          fsType,
+          totalBytes,
+          usedBytes: totalBytes - fs.bfree * fs.bsize,
+          availableBytes: fs.bavail * fs.bsize,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return disks.filter((disk): disk is DiskUsage => disk !== null);
+}
+
 export type HostStats = RpcOutput<typeof hostStatsRpc>;
 
 export function startSampler(): { read(): HostStats; stop(): void } {
@@ -90,6 +156,8 @@ export function startSampler(): { read(): HostStats; stop(): void } {
   let previousNet = readNetworkTotals();
   let previousAt = Date.now();
   let networkTotals = previousNet;
+  let disks: DiskUsage[] = [];
+  let diskRead: Promise<void> | null = null;
 
   const tick = () => {
     const now = Date.now();
@@ -116,8 +184,23 @@ export function startSampler(): { read(): HostStats; stop(): void } {
     networkTotals = net;
   };
 
+  const refreshDisks = () => {
+    // A slow disk must not pile up reads behind it.
+    if (diskRead) return;
+    diskRead = readDisks()
+      .then((next) => {
+        disks = next;
+      })
+      .catch(() => {})
+      .finally(() => {
+        diskRead = null;
+      });
+  };
+
   tick();
+  refreshDisks();
   const timer = setInterval(tick, SAMPLE_INTERVAL_MS);
+  const diskTimer = setInterval(refreshDisks, DISK_INTERVAL_MS);
 
   return {
     read() {
@@ -135,6 +218,7 @@ export function startSampler(): { read(): HostStats; stop(): void } {
         network: networkTotals
           ? { rxTotalBytes: networkTotals.rx, txTotalBytes: networkTotals.tx }
           : null,
+        disks,
         sampleIntervalMs: SAMPLE_INTERVAL_MS,
         current: current ?? {
           at: Date.now(),
@@ -148,6 +232,7 @@ export function startSampler(): { read(): HostStats; stop(): void } {
     },
     stop() {
       clearInterval(timer);
+      clearInterval(diskTimer);
     },
   };
 }

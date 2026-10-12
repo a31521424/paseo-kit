@@ -12,14 +12,14 @@ complete, self-contained Paseo plugin project.
 
 | ID | Name | What it does |
 | --- | --- | --- |
-| [`host-monitor`](plugins/host-monitor) | Host monitor | CPU, RAM and network speed of the daemon host in the sidebar footer, with a history popover. |
+| [`host-monitor`](plugins/host-monitor) | Host monitor | CPU, RAM, disk and network speed of the daemon host in the sidebar footer, with a history popover. |
 | [`ccusage-stats`](plugins/ccusage-stats) | Token usage | Token usage and estimated cost of your coding agents via [ccusage](https://github.com/ccusage/ccusage): today's total, day/week/month breakdown by agent, and a per-session composer pill. |
 
 ### host-monitor
 
-- One sidebar footer line: CPU and RAM percentage with small meters, download and upload speed.
-- Yellow above 70%, red above 90%; network speed is dropped first on a narrow sidebar.
-- Popover with about three minutes of history per metric, uptime and load average.
+- One sidebar footer line: CPU, RAM and disk percentage with small meters, then download and upload speed under one icon.
+- Yellow above 70%, red above 90%; on a narrow sidebar network speed is dropped first, then disk.
+- Popover with about three minutes of history per metric, usage of each local disk, uptime and load average.
 - Samples every 2 s on the daemon, keeps history in memory. Network speed needs Linux.
 
 ### ccusage-stats
@@ -52,7 +52,7 @@ paseo-kit does not vendor any third-party code. Dependencies are declared per pl
 | --- | --- | --- |
 | [Paseo](https://github.com/getpaseo/paseo) daemon and app | >= 0.11.1 | Declared as `requirements.paseo` in each `paseo-plugin.json`. |
 | Node.js and npm | Node 22+ recommended | On the daemon host, for installing dependencies and the `ccusage-stats` build step. |
-| Linux `/proc` | - | `host-monitor` network speed and available memory. Other systems show CPU and RAM only. |
+| Linux `/proc` | - | `host-monitor` network speed, available memory and the disk list. Other systems show CPU, RAM and the root disk only. |
 
 **Runtime npm dependencies** (installed with the plugin)
 
