@@ -12,7 +12,7 @@ import {
 import type { PeriodKind } from "../shared/usage";
 import { agentSegments, Legend, PaceBar, PERIOD_OPTIONS, PeriodBars, Segmented } from "./charts";
 import {
-  AVERAGE_DAYS,
+  TYPICAL_DAYS,
   typicalDay,
   useUsageReport,
   type TypicalDay,
@@ -109,7 +109,7 @@ export function UsageSidebarItem({ theme, openPopover }: PluginSidebarItemProps)
                 <PaceBar
                   theme={theme}
                   segments={agentSegments(theme, data.agents, today, "cost")}
-                  average={typical.cost}
+                  typical={typical.cost}
                   estimated={typical.estimated}
                 />
               </View>
@@ -198,9 +198,13 @@ export function UsagePopover({ theme, layout, openScreen }: PluginPopoverProps) 
       </View>
       <Headline theme={theme} kind={kind} periods={periods} index={selected} heroSize={22} />
       {kind === "daily" ? (
-        <Text style={{ fontSize: FONT.caption, color: theme.colors.foregroundMuted }}>
-          {typicalCaption(typical)}
-        </Text>
+        <View style={{ gap: 2 }}>
+          {typicalCaption(typical).map((line) => (
+            <Text key={line} style={{ fontSize: FONT.caption, color: theme.colors.foregroundMuted }}>
+              {line}
+            </Text>
+          ))}
+        </View>
       ) : null}
       <PeriodBars
         theme={theme}
@@ -220,12 +224,19 @@ export function UsagePopover({ theme, layout, openScreen }: PluginPopoverProps) 
   );
 }
 
-function typicalCaption(typical: TypicalDay): string {
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+/** The meter's tick, then the long-run daily average it is not. Both at API prices, like the headline. */
+function typicalCaption(typical: TypicalDay): string[] {
   const cost = formatCost(typical.cost);
-  if (typical.estimated) {
-    return `Typical day: ${cost} at API prices, a default until there is usage history`;
+  if (!typical.average) {
+    return [`Typical day: ${cost} at API prices, a default until there is usage history`];
   }
-  return `Typical day: ${cost} at API prices, averaged over active days in the last ${AVERAGE_DAYS}`;
+  const { average } = typical;
+  return [
+    `Typical day ${cost} · median of ${plural(typical.activeDays, "active day")} in ${TYPICAL_DAYS}`,
+    `Average ${formatCost(average.cost)}/day over ${plural(average.days, "day")} · ~${formatCost(average.cost * 30)}/month`,
+  ];
 }
 
 function Footer({

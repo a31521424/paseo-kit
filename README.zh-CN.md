@@ -22,7 +22,7 @@
 
 ### ccusage-stats
 
-- 侧边栏底部一行：今日 token 总量、对比近 14 天日均费用的进度条、估算费用。
+- 侧边栏底部一行：今日 token 总量、对比典型一天费用（近 28 天活跃日的中位数）的进度条、估算费用。
 - 弹出层：日 / 周 / 月总量、与上一周期的对比、堆叠柱状图。
 - 完整的 **Token usage** 页面（也可从 Command Center 打开）：30 天 / 12 周 / 12 个月历史、每百万 token 成本、缓存命中率、按 agent 和模型拆分、最近的 session。
 - 每个 agent 的输入框上方有一个 pill，显示当前 provider session 的 token 总量。

@@ -145,25 +145,26 @@ export function ShareBar({
 
 /**
  * Today against a typical day: the fill is today's total, split by agent, and a tick marks the
- * average. The track spans twice the average, so the tick sits mid-track until today passes
- * double; then the track stretches to today and the tick slides left. A default average gets a
- * muted tick, since it says nothing about this machine. Segments and average share one unit.
+ * typical day. The track spans twice the typical day, so the tick sits mid-track until today
+ * passes double; then the track stretches to today and the tick slides left. A default typical
+ * day gets a muted tick, since it says nothing about this machine. Segments and typical share
+ * one unit.
  */
 export function PaceBar({
   theme,
   segments,
-  average,
+  typical,
   estimated = false,
   height = 6,
 }: {
   theme: PluginTheme;
   segments: readonly ShareSegment[];
-  average: number;
+  typical: number;
   estimated?: boolean;
   height?: number;
 }) {
   const total = segments.reduce((sum, segment) => sum + Math.max(segment.value, 0), 0);
-  const scale = Math.max(total, average * 2, 1);
+  const scale = Math.max(total, typical * 2, 1);
   const tickHeight = height + 4;
   return (
     <View style={{ height: tickHeight, justifyContent: "center" }}>
@@ -187,7 +188,7 @@ export function PaceBar({
       <View
         style={{
           position: "absolute",
-          left: `${(average / scale) * 100}%`,
+          left: `${(typical / scale) * 100}%`,
           width: 2,
           height: tickHeight,
           marginLeft: -1,

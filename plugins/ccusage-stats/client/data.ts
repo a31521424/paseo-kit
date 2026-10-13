@@ -39,30 +39,58 @@ export function useSessionUsage(agentId: string) {
   });
 }
 
-// Days before today that define a typical day for the sidebar meter.
-export const AVERAGE_DAYS = 14;
-// With no history, the typical day follows SemiAnalysis's subscription limit tests: a $200 Claude
-// plan holds about $4,970 of API-equivalent value a month, and 20% is a realistic utilization.
-export const DEFAULT_TYPICAL_COST = (4970 * 0.2) / 30;
+// Days before today that define a typical day for the sidebar meter: four weeks, so weekly rhythms
+// even out and enough active days remain once idle ones are skipped.
+export const TYPICAL_DAYS = 28;
+// With no history, the typical day follows SemiAnalysis's subscription limit tests (October 2026,
+// agentic workload): a $200 Claude Max 20x plan holds about $11,726 of API-equivalent value a month
+// on Opus 5.5, and 20% is a realistic utilization. Labs change limits often; revisit with new tests.
+export const DEFAULT_TYPICAL_COST = (11726 * 0.2) / 30;
 
 /** A typical day in API-equivalent dollars, the same measure ccusage's cost is in. */
 export interface TypicalDay {
   cost: number;
+  /** Active days the figure is drawn from; 0 when the default stands in. */
+  activeDays: number;
   /** True when there is no recent history and the default stands in. */
   estimated: boolean;
+  /**
+   * Mean cost per calendar day, idle days included, from the first day with usage in the window
+   * through yesterday: what the meter's agents cost over time, comparable to a plan's price.
+   * Null with no history.
+   */
+  average: { cost: number; days: number } | null;
+}
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[middle] ?? 0)
+    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 }
 
 /**
- * Average cost per active day over the AVERAGE_DAYS before today. Idle days are skipped so
- * weekends and time off do not drag the typical day down. Cost rather than tokens, because cache
- * reads dominate token counts while costing next to nothing.
+ * Median cost per active day over the TYPICAL_DAYS before today. Idle days are skipped so
+ * weekends and time off do not drag the typical day down, and the median keeps one marathon day,
+ * or a day with a single prompt, from moving it far. Cost rather than tokens, because cache reads
+ * dominate token counts while costing next to nothing.
  */
 export function typicalDay(daily: readonly UsagePeriod[]): TypicalDay {
-  const active = daily.slice(-AVERAGE_DAYS - 1, -1).filter((day) => day.usage.cost > 0);
-  if (active.length === 0) return { cost: DEFAULT_TYPICAL_COST, estimated: true };
+  const costs = daily.slice(-TYPICAL_DAYS - 1, -1).map((day) => day.usage.cost);
+  const active = costs.filter((cost) => cost > 0);
+  if (active.length === 0) {
+    return { cost: DEFAULT_TYPICAL_COST, activeDays: 0, estimated: true, average: null };
+  }
+  // Counting from the first active day, so a short history is not averaged over empty weeks
+  // from before it began.
+  const days = costs.length - costs.findIndex((cost) => cost > 0);
+  const total = active.reduce((sum, cost) => sum + cost, 0);
   return {
-    cost: active.reduce((sum, day) => sum + day.usage.cost, 0) / active.length,
+    cost: median(active),
+    activeDays: active.length,
     estimated: false,
+    average: { cost: total / days, days },
   };
 }
 
