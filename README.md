@@ -25,7 +25,8 @@ complete, self-contained Paseo plugin project.
 ### ccusage-stats
 
 - Sidebar footer line with today's tokens, a meter of today's cost against your typical day (median of active days in the last 28) and estimated cost.
-- Popover with day / week / month totals, change against the previous period and a stacked chart.
+- Popover with day / week / month totals, change against the previous period and a stacked chart;
+  the day view also states your typical day and average daily cost.
 - Full **Token usage** screen (also in the Command Center): 30 days / 12 weeks / 12 months of history,
   cost per million tokens, cache hit rate, per-agent and per-model breakdown, recent sessions.
 - A composer pill on each agent with the token total of its current provider session.

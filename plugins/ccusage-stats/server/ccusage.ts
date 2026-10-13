@@ -6,8 +6,8 @@ import { z } from "zod";
 
 // ccusage 20 ships a native binary per platform; the `ccusage` npm package is only a launcher.
 // The daemon evaluates the server bundle without a module path, so `require.resolve` cannot find
-// our node_modules. Instead, look in every plugin directory the daemon has registered, then fall
-// back to a `ccusage` on PATH.
+// our node_modules. Instead, find our own directory among the plugins the daemon has registered,
+// then fall back to a `ccusage` on PATH.
 const NATIVE_PACKAGE = `@ccusage/ccusage-${process.platform}-${process.arch}`;
 const BINARY_NAME = process.platform === "win32" ? "ccusage.exe" : "ccusage";
 const RUN_TIMEOUT_MS = 60_000;
@@ -57,10 +57,8 @@ export interface CcusageBinary {
 }
 
 export function locateCcusage(): CcusageBinary {
-  const directories = registeredPluginDirectories();
-  // Prefer our own install, but any plugin that bundles the binary will do.
-  directories.sort((a, b) => Number(isThisPlugin(b)) - Number(isThisPlugin(a)));
-  for (const directory of directories) {
+  // Only our own install: never run a binary out of another plugin's directory.
+  for (const directory of registeredPluginDirectories().filter(isThisPlugin)) {
     const file = path.join(directory, "node_modules", NATIVE_PACKAGE, "bin", BINARY_NAME);
     if (isExecutable(file)) return { file, source: "bundled" };
   }
