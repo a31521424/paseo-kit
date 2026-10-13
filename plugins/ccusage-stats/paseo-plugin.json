@@ -2,7 +2,10 @@
   "id": "ccusage-stats",
   "name": "Token usage",
   "description": "Token usage and estimated cost of your coding agents, powered by ccusage",
-  "media": [],
+  "media": [
+    "assets/screenshot.png",
+    "assets/details.png"
+  ],
   "requirements": {
     "paseo": ">=0.11.1"
   },
