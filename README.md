@@ -14,6 +14,8 @@ complete, self-contained Paseo plugin project.
 | --- | --- | --- |
 | [`host-monitor`](plugins/host-monitor) | Host monitor | CPU, RAM, disk and network speed of the daemon host in the sidebar footer, with a history popover. |
 | [`ccusage-stats`](plugins/ccusage-stats) | Token usage | Token usage and estimated cost of your coding agents via [ccusage](https://github.com/ccusage/ccusage): today's total, day/week/month breakdown by agent, and a per-session composer pill. |
+| [`file-download`](plugins/file-download) | Download file | Cmd+S or Ctrl+S downloads the file you are previewing, including files outside the workspace such as `/tmp`. |
+| [`tab-recovery`](plugins/tab-recovery) | Closed agents | Lists the agents whose tab was closed (which archives them) in the current workspace and reopens one with a press. |
 
 ### host-monitor
 
@@ -32,6 +34,25 @@ complete, self-contained Paseo plugin project.
 - A composer pill on each agent with the token total of its current provider session.
 - Counts every agent ccusage supports (Claude Code, Codex, Gemini CLI, OpenCode, Amp, ...).
   Costs are offline estimates at API list prices. Nothing is sent off the host.
+
+### file-download
+
+- Cmd+S on macOS or Ctrl+S on Windows and Linux downloads the file preview you are looking at,
+  including files outside the workspace such as `/tmp` output. "Download current file" in the
+  Command Center does the same.
+- On any other tab, such as an agent, the shortcut does nothing. Inside Paseo's file editor it still
+  saves your edits.
+- "Open downloads" lists the downloads since the page loaded; nothing is discovered or listed on its own.
+- Transfers go in 4 MB pieces over the Paseo connection, so they work through relays and reverse
+  proxies. Up to 1 GB per file. Desktop app and browser only.
+
+### tab-recovery
+
+- Closing an agent's tab archives it. The **Closed agents** panel lists the archived top-level
+  agents of the workspace, newest first.
+- Reopen unarchives the agent, resumes its session and opens its tab again, like the Unarchive button
+  in an archived agent's tab. The daemon side runs `paseo agent reload`, so the `paseo` CLI must be on
+  the daemon's PATH.
 
 See each plugin's `OVERVIEW.md` for details and limits.
 
@@ -53,6 +74,7 @@ paseo-kit does not vendor any third-party code. Dependencies are declared per pl
 | --- | --- | --- |
 | [Paseo](https://github.com/getpaseo/paseo) daemon and app | >= 0.11.1 | Declared as `requirements.paseo` in each `paseo-plugin.json`. |
 | Node.js and npm | Node 22+ recommended | On the daemon host, for installing dependencies and the `ccusage-stats` build step. |
+| `paseo` CLI | same as the daemon | On the daemon's PATH, for `tab-recovery` to restore agents. Present with a standard install. |
 | Linux `/proc` | - | `host-monitor` network speed, available memory and the disk list. Other systems show CPU, RAM and the root disk only. |
 
 **Runtime npm dependencies** (installed with the plugin)
@@ -62,7 +84,7 @@ paseo-kit does not vendor any third-party code. Dependencies are declared per pl
 | [`ccusage`](https://github.com/ccusage/ccusage) | 20.0.29 | MIT | `ccusage-stats` |
 | `@ccusage/ccusage-<platform>-<arch>` | 20.0.29 | MIT | `ccusage-stats` (native binary, optional dependency of `ccusage`) |
 
-`host-monitor` has no runtime npm dependencies.
+`host-monitor`, `file-download` and `tab-recovery` have no runtime npm dependencies.
 
 **Provided by Paseo at runtime** (`devDependencies`, installed locally only for typechecking)
 
@@ -86,15 +108,15 @@ paseo-kit does not vendor any third-party code. Dependencies are declared per pl
 
 ### Install with an agent
 
-Copy this prompt into a Paseo agent running on the target machine. It installs or updates both
-plugins from GitHub. To install only one, remove the other ID from step 3.
+Copy this prompt into a Paseo agent running on the target machine. It installs or updates all
+plugins from GitHub. To install only some, remove the other IDs from step 3.
 
 ```text
 Install the paseo-kit Paseo plugins from https://github.com/a31521424/paseo-kit on this machine's Paseo daemon. Never restart the Paseo daemon; it would kill running agents.
 1. Run `paseo --version` and require 0.11.1 or later. Run `npm --version`; npm must be on the daemon's PATH because ccusage-stats runs `npm ci --omit=dev` when it installs.
 2. Get `home` from `paseo daemon status --json` and read `pluginsEnabled` in `<home>/config.json` (missing means false). If it is not true, stop and ask me before enabling it, and warn me that plugins are trusted, unsandboxed code with access to this machine. If I agree, set only that field to true, keep the rest of the file, and run `paseo reload --json`.
-3. Run `paseo plugin ls`. For each ID in `host-monitor` and `ccusage-stats`: if it is not installed, run `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`; if its SOURCE is already this GitHub repository, run `paseo plugin update <id> --yes`; if it is installed from any other source, ask me before removing and reinstalling it.
-4. Run `paseo plugin ls` and require both plugins to be `running` with no error. If one fails, show me its error and `paseo plugin logs <id>`.
+3. Run `paseo plugin ls`. For each ID in `host-monitor`, `ccusage-stats`, `file-download` and `tab-recovery`: if it is not installed, run `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`; if its SOURCE is already this GitHub repository, run `paseo plugin update <id> --yes`; if it is installed from any other source, ask me before removing and reinstalling it.
+4. Run `paseo plugin ls` and require every plugin to be `running` with no error. If one fails, show me its error and `paseo plugin logs <id>`.
 5. Report each plugin's SOURCE and REVISION.
 ```
 
@@ -103,10 +125,12 @@ Install the paseo-kit Paseo plugins from https://github.com/a31521424/paseo-kit 
 ```bash
 paseo plugin install github:a31521424/paseo-kit:plugins/host-monitor
 paseo plugin install github:a31521424/paseo-kit:plugins/ccusage-stats
+paseo plugin install github:a31521424/paseo-kit:plugins/file-download
+paseo plugin install github:a31521424/paseo-kit:plugins/tab-recovery
 ```
 
 `ccusage-stats` declares `build: [["npm", "ci", "--omit=dev"]]`, so Paseo installs the bundled
-ccusage binary from the committed lockfile. `host-monitor` only uses host-provided libraries.
+ccusage binary from the committed lockfile. The other plugins only use host-provided libraries.
 Update later with `paseo plugin update <id>`.
 
 ### From a local clone
@@ -118,6 +142,8 @@ npm run install:all
 
 paseo plugin install "$PWD/plugins/host-monitor"
 paseo plugin install "$PWD/plugins/ccusage-stats"
+paseo plugin install "$PWD/plugins/file-download"
+paseo plugin install "$PWD/plugins/tab-recovery"
 paseo plugin ls
 ```
 

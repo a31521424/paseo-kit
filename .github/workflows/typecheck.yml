@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [host-monitor, ccusage-stats]
+        plugin: [host-monitor, ccusage-stats, file-download, tab-recovery]
     defaults:
       run:
         working-directory: plugins/${{ matrix.plugin }}

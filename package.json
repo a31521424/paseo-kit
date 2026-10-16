@@ -1,7 +1,7 @@
 {
   "name": "paseo-kit",
   "private": true,
-  "description": "A collection of Paseo plugins: host-monitor and ccusage-stats.",
+  "description": "A collection of Paseo plugins: host-monitor, ccusage-stats, file-download and tab-recovery.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

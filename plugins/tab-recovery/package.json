@@ -1,0 +1,37 @@
+{
+  "name": "tab-recovery",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Reopen agent tabs that were closed by accident",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a31521424/paseo-kit.git",
+    "directory": "plugins/tab-recovery"
+  },
+  "files": [
+    "paseo-plugin.json",
+    "OVERVIEW.md",
+    "index.client.ts",
+    "index.client.tsx",
+    "index.server.ts",
+    "index.server.tsx",
+    "client/",
+    "server/",
+    "shared/",
+    "assets/"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "0.11.1",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/node": "^22.0.0",
+    "@types/react": "~19.2.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "^5.9.3",
+    "zod": "^4.4.3"
+  }
+}

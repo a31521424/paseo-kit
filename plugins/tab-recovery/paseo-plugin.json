@@ -1,0 +1,8 @@
+{
+  "id": "tab-recovery",
+  "name": "Closed agents",
+  "description": "Reopen agent tabs that were closed, and so archived, by accident",
+  "requirements": {
+    "paseo": ">=0.11.1"
+  }
+}

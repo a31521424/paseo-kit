@@ -1,0 +1,8 @@
+{
+  "id": "file-download",
+  "name": "Download file",
+  "description": "Download the file you are previewing with Cmd+S or Ctrl+S, including files outside the workspace",
+  "requirements": {
+    "paseo": ">=0.11.1"
+  }
+}

@@ -12,6 +12,8 @@
 | --- | --- | --- |
 | [`host-monitor`](plugins/host-monitor) | Host monitor | 在侧边栏底部显示 daemon 主机的 CPU、内存、磁盘和网速，点击查看历史曲线。 |
 | [`ccusage-stats`](plugins/ccusage-stats) | Token usage | 基于 [ccusage](https://github.com/ccusage/ccusage) 统计编码 agent 的 token 消耗与估算费用：今日总量、按日/周/月分 agent 分析、当前 session 消耗。 |
+| [`file-download`](plugins/file-download) | Download file | 用 Cmd+S 或 Ctrl+S 下载当前预览的文件，包括 `/tmp` 等工作区外的文件。 |
+| [`tab-recovery`](plugins/tab-recovery) | Closed agents | 列出当前工作区里被关闭（即被归档）的 agent，一键重新打开。 |
 
 ### host-monitor
 
@@ -27,6 +29,18 @@
 - 完整的 **Token usage** 页面（也可从 Command Center 打开）：30 天 / 12 周 / 12 个月历史、每百万 token 成本、缓存命中率、按 agent 和模型拆分、最近的 session。
 - 每个 agent 的输入框上方有一个 pill，显示当前 provider session 的 token 总量。
 - 统计 ccusage 支持的所有 agent（Claude Code、Codex、Gemini CLI、OpenCode、Amp 等）。费用为按 API 标价离线估算，不向外发送任何数据。
+
+### file-download
+
+- 在 macOS 上按 Cmd+S、在 Windows 和 Linux 上按 Ctrl+S，下载当前正在预览的文件，`/tmp` 等工作区外的文件也可以。命令面板里的 "Download current file" 效果相同。
+- 当前聚焦的不是文件（比如 agent 页面）时，快捷键什么都不做。光标在 Paseo 的文件编辑器里时，快捷键仍然是保存修改。
+- 命令面板里的 "Open downloads" 列出本页面加载以来的下载记录；插件不会主动发现或列出文件。
+- 文件按 4 MB 分块经 Paseo 连接传输，经中转或反向代理也能用。单个文件上限 1 GB。仅支持桌面版和网页端。
+
+### tab-recovery
+
+- 关闭 agent 标签页会归档该 agent。**Closed agents** 面板按关闭时间倒序列出本工作区被归档的主 agent。
+- 点 Reopen 会解除归档、恢复会话并重新打开标签，与已归档 agent 标签里的 Unarchive 按钮效果相同。daemon 端通过 `paseo agent reload` 实现，所以 daemon 的 PATH 中需要有 `paseo` CLI。
 
 详细说明与限制见各插件的 `OVERVIEW.md`。
 
@@ -46,6 +60,7 @@
 | --- | --- | --- |
 | [Paseo](https://github.com/getpaseo/paseo) daemon 与 app | >= 0.11.1 | 在各 `paseo-plugin.json` 的 `requirements.paseo` 中声明。 |
 | Node.js 与 npm | 建议 Node 22+ | 位于 daemon 主机，用于安装依赖和执行 `ccusage-stats` 的 build 步骤。 |
+| `paseo` CLI | 与 daemon 相同 | 需在 daemon 的 PATH 中，`tab-recovery` 用它恢复 agent。标准安装自带。 |
 | Linux `/proc` | - | `host-monitor` 的网速、可用内存与磁盘列表。其他系统只显示 CPU、内存和根分区。 |
 
 **运行时 npm 依赖**（随插件安装）
@@ -55,7 +70,7 @@
 | [`ccusage`](https://github.com/ccusage/ccusage) | 20.0.29 | MIT | `ccusage-stats` |
 | `@ccusage/ccusage-<platform>-<arch>` | 20.0.29 | MIT | `ccusage-stats`（原生二进制，`ccusage` 的可选依赖） |
 
-`host-monitor` 没有运行时 npm 依赖。
+`host-monitor`、`file-download` 和 `tab-recovery` 没有运行时 npm 依赖。
 
 **运行时由 Paseo 提供**（列在 `devDependencies` 中，本地安装仅用于类型检查）
 
@@ -79,14 +94,14 @@
 
 ### 让 Agent 安装
 
-把下面这段提示词复制给运行在目标机器上的 Paseo agent，它会从 GitHub 安装或更新两个插件。只想装其中一个时，把第 3 步里另一个 ID 删掉即可。
+把下面这段提示词复制给运行在目标机器上的 Paseo agent，它会从 GitHub 安装或更新全部插件。只想装其中几个时，把第 3 步里其他 ID 删掉即可。
 
 ```text
 请在本机的 Paseo daemon 上安装 https://github.com/a31521424/paseo-kit 中的 Paseo 插件。全程不要重启 Paseo daemon，否则会杀掉正在运行的 agent。
 1. 执行 `paseo --version`，版本必须 ≥ 0.11.1。执行 `npm --version`，npm 必须在 daemon 的 PATH 中，因为 ccusage-stats 安装时会执行 `npm ci --omit=dev`。
 2. 从 `paseo daemon status --json` 取得 `home`，读取 `<home>/config.json` 中的 `pluginsEnabled`（缺失视为 false）。如果不是 true，先停下来征求我的同意，并提醒我：插件是受信任、无沙箱的代码，可以访问这台机器。我同意后，只把该字段设为 true，保留文件其余内容，然后执行 `paseo reload --json`。
-3. 执行 `paseo plugin ls`。对 `host-monitor` 和 `ccusage-stats` 两个 ID 分别处理：未安装则执行 `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`；SOURCE 已经是本 GitHub 仓库则执行 `paseo plugin update <id> --yes`；从其他来源安装的，先问我再决定是否删除重装。
-4. 执行 `paseo plugin ls`，两个插件都必须是 `running` 且没有错误。失败时把错误信息和 `paseo plugin logs <id>` 的输出给我。
+3. 执行 `paseo plugin ls`。对 `host-monitor`、`ccusage-stats`、`file-download` 和 `tab-recovery` 每个 ID 分别处理：未安装则执行 `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`；SOURCE 已经是本 GitHub 仓库则执行 `paseo plugin update <id> --yes`；从其他来源安装的，先问我再决定是否删除重装。
+4. 执行 `paseo plugin ls`，每个插件都必须是 `running` 且没有错误。失败时把错误信息和 `paseo plugin logs <id>` 的输出给我。
 5. 汇报每个插件的 SOURCE 和 REVISION。
 ```
 
@@ -95,9 +110,11 @@
 ```bash
 paseo plugin install github:a31521424/paseo-kit:plugins/host-monitor
 paseo plugin install github:a31521424/paseo-kit:plugins/ccusage-stats
+paseo plugin install github:a31521424/paseo-kit:plugins/file-download
+paseo plugin install github:a31521424/paseo-kit:plugins/tab-recovery
 ```
 
-`ccusage-stats` 在 manifest 中声明了 `build: [["npm", "ci", "--omit=dev"]]`，Paseo 会按锁文件安装内置的 ccusage 二进制。`host-monitor` 只用 Paseo 提供的库。之后用 `paseo plugin update <id>` 更新。
+`ccusage-stats` 在 manifest 中声明了 `build: [["npm", "ci", "--omit=dev"]]`，Paseo 会按锁文件安装内置的 ccusage 二进制。其他插件只用 Paseo 提供的库。之后用 `paseo plugin update <id>` 更新。
 
 ### 从本地克隆安装
 
@@ -108,6 +125,8 @@ npm run install:all
 
 paseo plugin install "$PWD/plugins/host-monitor"
 paseo plugin install "$PWD/plugins/ccusage-stats"
+paseo plugin install "$PWD/plugins/file-download"
+paseo plugin install "$PWD/plugins/tab-recovery"
 paseo plugin ls
 ```
 
