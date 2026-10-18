@@ -1,9 +1,18 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import v8 from "node:v8";
 import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { createTransferStore } from "./server/transfers";
 import { closeRpc, hostRpc, openRpc, readRpc } from "./shared/download";
+
+// The plugin process validates every daemon message with one generated function of about 11 MB
+// (`safeParse_WSOutboundMessageSchema` in @getpaseo/protocol). Once it is hot, V8's Maglev compiler
+// optimizes it on a worker thread, taking about 500 MB of native memory per compile, and again after
+// each deopt; glibc keeps that memory, so the process spiked to almost 1 GB. Turbofan already skips a
+// function this large, so without Maglev it stays in the interpreter. The flag must be set before
+// the function gets hot, and this bundle is evaluated before the daemon client connects.
+v8.setFlagsFromString("--no-maglev");
 
 type Paseo = PluginHandlerContext["paseo"];
 
