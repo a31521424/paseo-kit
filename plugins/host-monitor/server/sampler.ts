@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import os from "node:os";
@@ -57,8 +58,31 @@ function readCpuTimes(): CpuTimes {
   return { idle, total };
 }
 
+export function parseDarwinUsedBytes(raw: string): number {
+  const pageSize = /page size of (\d+) bytes/.exec(raw);
+  if (!pageSize || Number(pageSize[1]) === 0) throw new Error("vm_stat: missing page size");
+  const pages = (name: string): number => {
+    const match = new RegExp(`^${name}:\\s+(\\d+)\\.`, "m").exec(raw);
+    if (!match) throw new Error(`vm_stat: missing ${name}`);
+    return Number(match[1]);
+  };
+  // Activity Monitor: app (anonymous minus purgeable), wired, and physical compressed memory.
+  // File-backed cache is reclaimable; pages stored in the compressor are not physical bytes.
+  return (pages("Anonymous pages") - pages("Pages purgeable") + pages("Pages wired down") +
+    pages("Pages occupied by compressor")) * Number(pageSize[1]);
+}
+
 function readMemory(): { totalBytes: number; usedBytes: number } {
   const totalBytes = os.totalmem();
+  if (os.platform() === "darwin") {
+    try {
+      const raw = execFileSync("/usr/bin/vm_stat", { encoding: "utf8", timeout: 1000 });
+      return { totalBytes, usedBytes: parseDarwinUsedBytes(raw) };
+    } catch (error) {
+      console.warn("host-monitor: failed to read macOS memory; using os.freemem", error);
+      return { totalBytes, usedBytes: totalBytes - os.freemem() };
+    }
+  }
   try {
     const match = /^MemAvailable:\s+(\d+) kB/m.exec(readFileSync("/proc/meminfo", "utf8"));
     if (match) return { totalBytes, usedBytes: totalBytes - Number(match[1]) * 1024 };
@@ -158,6 +182,7 @@ export function startSampler(): { read(): HostStats; stop(): void } {
   let networkTotals = previousNet;
   let disks: DiskUsage[] = [];
   let diskRead: Promise<void> | null = null;
+  let memory: ReturnType<typeof readMemory>;
 
   const tick = () => {
     const now = Date.now();
@@ -166,7 +191,7 @@ export function startSampler(): { read(): HostStats; stop(): void } {
     const seconds = Math.max((now - previousAt) / 1000, 0.001);
     const totalDelta = cpu.total - previousCpu.total;
     const idleDelta = cpu.idle - previousCpu.idle;
-    const memory = readMemory();
+    memory = readMemory();
 
     const sample: HostSample = {
       at: now,
@@ -214,7 +239,7 @@ export function startSampler(): { read(): HostStats; stop(): void } {
         cpuCount: cpus.length,
         cpuModel: cpus[0]?.model ?? "unknown",
         loadAverage: [one, five, fifteen],
-        memory: readMemory(),
+        memory,
         network: networkTotals
           ? { rxTotalBytes: networkTotals.rx, txTotalBytes: networkTotals.tx }
           : null,
