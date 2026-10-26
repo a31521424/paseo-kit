@@ -11,7 +11,20 @@ import {
 } from "react-native";
 import type { hostStatsRpc } from "../shared/stats";
 import { formatBytes, formatCompactRate, formatPercent, formatRate, formatUptime } from "./format";
-import { Meter, Sparkline, diskPercent, loadColor, scaleToPeak, sumDisks, useHostStats } from "./stats";
+import {
+  Meter,
+  Sparkline,
+  diskPercent,
+  loadColor,
+  memoryPercent,
+  memorySeverity,
+  percentSeverity,
+  scaleToPeak,
+  severityColor,
+  sumDisks,
+  useHostStats,
+  type Severity,
+} from "./stats";
 
 // Geometry follows the built-in usage summary in the same footer.
 const ICON_SIZE = 14;
@@ -41,6 +54,8 @@ interface Metric {
   /** One number, or two (download and upload) sharing the icon. */
   texts: readonly string[];
   percent?: number;
+  /** Sets the color of a metric with a percent. */
+  severity?: Severity;
 }
 
 // On a narrow sidebar, network goes first, then disk; CPU and RAM always stay.
@@ -48,14 +63,32 @@ const DROP_ORDER: readonly MetricKey[] = ["network", "disk"];
 
 function metricsOf(stats: HostStats): Metric[] {
   const { current, memory, network, disks } = stats;
-  const memoryPercent = (memory.usedBytes / memory.totalBytes) * 100;
+  const ram = memoryPercent(memory);
   const metrics: Metric[] = [
-    { key: "cpu", icon: "Cpu", texts: [formatPercent(current.cpuPercent)], percent: current.cpuPercent },
-    { key: "memory", icon: "MemoryStick", texts: [formatPercent(memoryPercent)], percent: memoryPercent },
+    {
+      key: "cpu",
+      icon: "Cpu",
+      texts: [formatPercent(current.cpuPercent)],
+      percent: current.cpuPercent,
+      severity: percentSeverity(current.cpuPercent),
+    },
+    {
+      key: "memory",
+      icon: "MemoryStick",
+      texts: [formatPercent(ram)],
+      percent: ram,
+      severity: memorySeverity(memory),
+    },
   ];
   if (disks.length > 0) {
     const { percent } = sumDisks(disks);
-    metrics.push({ key: "disk", icon: "HardDrive", texts: [formatPercent(percent)], percent });
+    metrics.push({
+      key: "disk",
+      icon: "HardDrive",
+      texts: [formatPercent(percent)],
+      percent,
+      severity: percentSeverity(percent),
+    });
   }
   if (network) {
     metrics.push({
@@ -85,8 +118,8 @@ function MetricLine({
   return layout.shown.map((metric, index) => {
     const metered = layout.meters && metric.percent !== undefined;
     const valueColor =
-      metric.percent !== undefined && metric.percent >= 70
-        ? loadColor(theme, metric.percent)
+      metric.severity !== undefined && metric.severity !== "normal"
+        ? severityColor(theme, metric.severity)
         : theme.colors.foreground;
     const textStyle = { color: valueColor, fontSize: FONT_SIZE, fontVariant: ["tabular-nums" as const] };
     const [first, second] = metric.texts;
@@ -107,6 +140,7 @@ function MetricLine({
           <Meter
             theme={theme}
             percent={metric.percent ?? 0}
+            severity={metric.severity}
             height={METER_HEIGHT}
             style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: MIN_METER_WIDTH, marginLeft: ICON_GAP }}
           />
@@ -184,8 +218,9 @@ function describe(stats: HostStats): string {
   const { current, memory, network, disks } = stats;
   const parts = [
     `CPU ${formatPercent(current.cpuPercent)}`,
-    `memory ${formatPercent((memory.usedBytes / memory.totalBytes) * 100)}`,
+    `memory ${formatPercent(memoryPercent(memory))}`,
   ];
+  if (memory.pressure) parts.push(`memory pressure ${memory.pressure}`);
   if (disks.length > 0) parts.push(`disk ${formatPercent(sumDisks(disks).percent)}`);
   if (network) {
     parts.push(
@@ -257,9 +292,11 @@ interface PreviewRowProps {
   value: string;
   color: string;
   values: readonly number[];
+  /** A muted line under the label. */
+  detail?: string;
 }
 
-function PreviewRow({ theme, icon, label, value, color, values }: PreviewRowProps) {
+function PreviewRow({ theme, icon, label, value, color, values, detail }: PreviewRowProps) {
   return (
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: ICON_GAP }}>
@@ -273,9 +310,28 @@ function PreviewRow({ theme, icon, label, value, color, values }: PreviewRowProp
           {value}
         </Text>
       </View>
+      {detail ? <Caption theme={theme} text={detail} /> : null}
       <Sparkline values={values} color={color} height={18} />
     </View>
   );
+}
+
+function Caption({ theme, text }: { theme: PluginTheme; text: string }) {
+  return (
+    <Text
+      style={{ paddingLeft: ICON_SIZE + ICON_GAP, color: theme.colors.foregroundMuted, fontSize: FONT_SIZE - 1 }}
+    >
+      {text}
+    </Text>
+  );
+}
+
+/** macOS: what the RAM figure leaves out, and the pressure that colors it. */
+function memoryDetail(memory: HostStats["memory"]): string | undefined {
+  const parts: string[] = [];
+  if (memory.cachedBytes !== null) parts.push(`Cached files ${formatBytes(memory.cachedBytes)}`);
+  if (memory.pressure !== null) parts.push(`pressure ${memory.pressure}`);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function DiskSection({ theme, disks }: { theme: PluginTheme; disks: HostStats["disks"] }) {
@@ -293,6 +349,11 @@ function DiskSection({ theme, disks }: { theme: PluginTheme; disks: HostStats["d
           {formatPercent(total.percent)}
         </Text>
       </View>
+      {/* statfs on an APFS volume counts every volume sharing its container, so say so: Finder and
+          other tools often show the data volume alone. */}
+      {disks.some((disk) => disk.fsType === "apfs") ? (
+        <Caption theme={theme} text="APFS container: all volumes sharing it" />
+      ) : null}
       {/* A single disk is the total itself: its meter, not a repeat of the same numbers. */}
       {disks.length === 1 ? <Meter theme={theme} percent={total.percent} height={METER_HEIGHT - 2} /> : null}
       {disks.length > 1 ? disks.map((disk) => {
@@ -345,7 +406,6 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
   }
 
   const { current, history, memory, network, disks } = data;
-  const memoryPercent = (memory.usedBytes / memory.totalBytes) * 100;
 
   return (
     <View style={rootStyle}>
@@ -368,9 +428,10 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
         theme={theme}
         icon="MemoryStick"
         label={`RAM · ${formatBytes(memory.usedBytes)} / ${formatBytes(memory.totalBytes)}`}
-        value={formatPercent(memoryPercent)}
-        color={loadColor(theme, memoryPercent)}
+        value={formatPercent(memoryPercent(memory))}
+        color={severityColor(theme, memorySeverity(memory))}
         values={history.map((s) => s.memoryPercent)}
+        detail={memoryDetail(memory)}
       />
       {network ? (
         <>

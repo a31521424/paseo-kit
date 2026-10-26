@@ -19,6 +19,16 @@ const diskSchema = z.object({
   availableBytes: z.number(),
 });
 
+const memorySchema = z.object({
+  totalBytes: z.number(),
+  /** Memory in use and not reclaimable: what the RAM percentage shows. */
+  usedBytes: z.number(),
+  /** macOS: cached files the system can drop at once, counted as neither used nor free. */
+  cachedBytes: z.number().nullable(),
+  /** macOS: the kernel's memory pressure level; when present it, not the percentage, sets the color. */
+  pressure: z.enum(["normal", "warning", "critical"]).nullable(),
+});
+
 export const hostStatsRpc = defineRpc({
   name: "host.stats",
   input: z.object({}),
@@ -29,7 +39,7 @@ export const hostStatsRpc = defineRpc({
     cpuCount: z.number(),
     cpuModel: z.string(),
     loadAverage: z.tuple([z.number(), z.number(), z.number()]),
-    memory: z.object({ totalBytes: z.number(), usedBytes: z.number() }),
+    memory: memorySchema,
     network: z
       .object({ rxTotalBytes: z.number(), txTotalBytes: z.number() })
       .nullable(),
@@ -42,3 +52,5 @@ export const hostStatsRpc = defineRpc({
 
 export type HostSample = z.infer<typeof sampleSchema>;
 export type DiskUsage = z.infer<typeof diskSchema>;
+export type MemoryUsage = z.infer<typeof memorySchema>;
+export type MemoryPressure = NonNullable<MemoryUsage["pressure"]>;

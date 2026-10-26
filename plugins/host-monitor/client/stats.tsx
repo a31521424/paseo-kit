@@ -2,7 +2,13 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import { View, type ViewStyle } from "react-native";
-import { hostStatsRpc, type DiskUsage, type HostSample } from "../shared/stats";
+import {
+  hostStatsRpc,
+  type DiskUsage,
+  type HostSample,
+  type MemoryPressure,
+  type MemoryUsage,
+} from "../shared/stats";
 
 const REFRESH_MS = 2000;
 
@@ -15,11 +21,36 @@ export function useHostStats() {
   });
 }
 
+/** How hot a resource runs; anything but normal gets a status color. */
+export type Severity = MemoryPressure;
+
+export function percentSeverity(percent: number): Severity {
+  if (percent >= 90) return "critical";
+  if (percent >= 70) return "warning";
+  return "normal";
+}
+
 /** Muted until a resource runs hot, like the built-in usage summary. */
-export function loadColor(theme: PluginTheme, percent: number): string {
-  if (percent >= 90) return theme.colors.statusDanger;
-  if (percent >= 70) return theme.colors.statusWarning;
+export function severityColor(theme: PluginTheme, severity: Severity): string {
+  if (severity === "critical") return theme.colors.statusDanger;
+  if (severity === "warning") return theme.colors.statusWarning;
   return theme.colors.foregroundMuted;
+}
+
+export function loadColor(theme: PluginTheme, percent: number): string {
+  return severityColor(theme, percentSeverity(percent));
+}
+
+export function memoryPercent(memory: Pick<MemoryUsage, "usedBytes" | "totalBytes">): number {
+  return memory.totalBytes > 0 ? (memory.usedBytes / memory.totalBytes) * 100 : 0;
+}
+
+/**
+ * macOS reports memory pressure, which is what decides whether the Mac is short of memory: it can
+ * run at high usage with no pressure at all. Elsewhere the percentage stands in for it.
+ */
+export function memorySeverity(memory: MemoryUsage): Severity {
+  return memory.pressure ?? percentSeverity(memoryPercent(memory));
 }
 
 /** Like df: the share of the space a user can fill, so a disk at 100% really has no room left. */
@@ -47,15 +78,17 @@ export function scaleToPeak(samples: readonly HostSample[], pick: (s: HostSample
 // A load above zero always shows a sliver, so a nearly idle meter is not mistaken for an empty one.
 const MIN_FILL_WIDTH = 2;
 
-/** A horizontal bar filled to `percent`, colored by load. Size it with `style`. */
+/** A horizontal bar filled to `percent`, colored by load unless `severity` is given. Size it with `style`. */
 export function Meter({
   theme,
   percent,
+  severity,
   height,
   style,
 }: {
   theme: PluginTheme;
   percent: number;
+  severity?: Severity;
   height: number;
   style?: ViewStyle;
 }) {
@@ -79,7 +112,7 @@ export function Meter({
           height: "100%",
           width: `${Math.min(Math.max(percent, 0), 100)}%`,
           minWidth: percent > 0 ? MIN_FILL_WIDTH : 0,
-          backgroundColor: loadColor(theme, percent),
+          backgroundColor: severityColor(theme, severity ?? percentSeverity(percent)),
         }}
       />
     </View>

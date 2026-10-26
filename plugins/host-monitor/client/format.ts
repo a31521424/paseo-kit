@@ -1,4 +1,5 @@
-const UNITS = ["B", "KB", "MB", "GB", "TB"];
+// Steps of 1024 carry IEC names: 994,610,155,520 bytes is 926.3 GiB, not 926.3 GB.
+const UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
 
 export function formatBytes(bytes: number): string {
   let value = bytes;
@@ -14,7 +15,7 @@ export function formatRate(bytesPerSec: number): string {
   return `${formatBytes(bytesPerSec)}/s`;
 }
 
-/** "5K", "1.2M": no unit suffix, for tight spaces like the sidebar. */
+/** "5K", "1.2M": no unit suffix, for tight spaces like the sidebar. Steps of 1024, like formatBytes. */
 export function formatCompactRate(bytesPerSec: number): string {
   // Never more than four characters, so it fits the sidebar's fixed slot. Thresholds sit below
   // the rounding points: 9.96 would print as "10.0", 999.6 as "1000".
