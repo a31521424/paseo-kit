@@ -1,0 +1,8 @@
+{
+  "id": "media-studio",
+  "name": "Media studio",
+  "description": "Review the images, video and audio your agents make: inline cards in the chat, a player with a filmstrip and waveform timeline, and uploads and downloads of large files",
+  "requirements": {
+    "paseo": ">=0.15.3"
+  }
+}
