@@ -14,6 +14,7 @@
 | [`ccusage-stats`](plugins/ccusage-stats) | Token usage | 基于 [ccusage](https://github.com/ccusage/ccusage) 统计编码 agent 的 token 消耗与估算费用：今日总量、按日/周/月分 agent 分析、当前 session 消耗。 |
 | [`file-download`](plugins/file-download) | Download file | 用 Cmd+S 或 Ctrl+S 下载当前预览的文件，包括 `/tmp` 等工作区外的文件。 |
 | [`tab-recovery`](plugins/tab-recovery) | Closed agents | 列出当前工作区里被关闭（即被归档）的 agent，一键重新打开。 |
+| [`media-studio`](plugins/media-studio) | Media studio | 审看 agent 产出的图片、视频和音频：对话内卡片、带胶片条和波形时间线的流式播放器、带时间码的批注回传给 agent、大文件上传下载、支持 SSH 远程主机上的文件。 |
 
 ### host-monitor
 
@@ -42,11 +43,22 @@
 - 关闭 agent 标签页会归档该 agent。**Closed agents** 面板按关闭时间倒序列出本工作区被归档的主 agent。
 - 点 Reopen 会解除归档、恢复会话并重新打开标签，与已归档 agent 标签里的 Unarchive 按钮效果相同。daemon 端通过 `paseo agent reload` 实现，所以 daemon 的 PATH 中需要有 `paseo` CLI。
 
+### media-studio
+
+- 给 agent 提供 `preview_media` 工具：渲染、剪辑、截帧或混音后，直接在对话里以带播放器的卡片展示。每轮结束后，在回复下方追加一张卡片，汇总本轮展示过的媒体以及新增或修改的媒体文件。
+- 播放器从 daemon 流式拉取，大文件约 1 秒起播，拖动即时跳转。H.264 直接播放原片，其他格式实时转成 720p 代理（可用时走 VideoToolbox 或 NVENC 硬件编码）。时间线带时间码、胶片条、波形、悬停预览帧、逐帧步进、入出点、循环和剪辑常用快捷键。
+- 长 GOP 成片约 1 秒跳转：从播放头到下一个关键帧的一小段实时近无损重编，之后接回原片。
+- 剪辑工具：按文件记住播放位置、入出点和倍速（切 tab、刷新、重渲染后都能接着看），输入时间码跳转，两个版本在同一时间点来回对比，安全框和 9:16 / 4:5 / 1:1 裁切参考线，EBU R128 响度与真峰值检查（对照 −14 LUFS）。
+- 批注发给 agent 时附带文件、时间码、入出点区间，以及当前画面（作为图片）；agent 工作中也能发（并入当前任务、不打断）；批注列在播放器旁并标在时间线上，可一键复制成带时间码的清单。
+- **媒体**面板：最近媒体或按文件夹浏览，按钮或拖拽上传，大文件下载边收边写盘。传输以 4 MB 分块走 Paseo 连接，直连、反向代理和隧道都可用，不需要额外端口。
+- SSH 主机上的文件（`别名:/路径`，别名取自 `~/.ssh/config`）由该主机的 ffmpeg 处理，适合 agent 在 GPU 服务器上渲染的场景。
+- 需要 daemon 主机安装 ffmpeg，Paseo 0.15.3 及以上。播放和上传需要桌面端或浏览器。
+
 详细说明与限制见各插件的 `OVERVIEW.md`。
 
 ## 环境要求
 
-- Paseo **0.11.1** 及以上（daemon 和 app）。
+- Paseo **0.11.1** 及以上（daemon 和 app）；`media-studio` 需要 **0.15.3** 及以上。
 - daemon 已开启插件：**Settings → Plugins → Enable plugins**，或在 daemon 的 `config.json` 中设置 `"pluginsEnabled": true` 后执行 `paseo reload`。
 - daemon 主机上有 Node.js 和 npm（用于安装依赖）。
 
@@ -62,6 +74,8 @@
 | Node.js 与 npm | 建议 Node 22+ | 位于 daemon 主机，用于安装依赖和执行 `ccusage-stats` 的 build 步骤。 |
 | `paseo` CLI | 与 daemon 相同 | 需在 daemon 的 PATH 中，`tab-recovery` 用它恢复 agent。标准安装自带。 |
 | Linux `/proc` | - | `host-monitor` 的网速、可用内存与磁盘列表。其他系统只显示 CPU、内存和根分区。 |
+| ffmpeg（ffprobe 可选） | 建议 6 及以上 | `media-studio` 需要，位于 daemon 主机，需含 libx264；预览 SSH 主机上的文件时，该主机也需要。 |
+| `ssh` 客户端 | - | 仅 `media-studio` 预览 SSH 主机文件时需要，密钥需免交互登录。 |
 
 **运行时 npm 依赖**（随插件安装）
 
@@ -70,13 +84,13 @@
 | [`ccusage`](https://github.com/ccusage/ccusage) | 20.0.29 | MIT | `ccusage-stats` |
 | `@ccusage/ccusage-<platform>-<arch>` | 20.0.29 | MIT | `ccusage-stats`（原生二进制，`ccusage` 的可选依赖） |
 
-`host-monitor`、`file-download` 和 `tab-recovery` 没有运行时 npm 依赖。
+`host-monitor`、`file-download`、`tab-recovery` 和 `media-studio` 没有运行时 npm 依赖。
 
 **运行时由 Paseo 提供**（列在 `devDependencies` 中，本地安装仅用于类型检查）
 
 | 包 | 版本 | 许可证 |
 | --- | --- | --- |
-| [`@getpaseo/plugin`](https://github.com/getpaseo/paseo) | 0.11.1 | Apache-2.0（Paseo） |
+| [`@getpaseo/plugin`](https://github.com/getpaseo/paseo) | 0.11.1（`media-studio`：0.15.3） | Apache-2.0（Paseo） |
 | `react` | 19.1.0 | MIT |
 | `react-native` | 0.81.5 | MIT |
 | `@tanstack/react-query` | ^5.90.11 | MIT |
@@ -100,7 +114,7 @@
 请在本机的 Paseo daemon 上安装 https://github.com/a31521424/paseo-kit 中的 Paseo 插件。全程不要重启 Paseo daemon，否则会杀掉正在运行的 agent。
 1. 执行 `paseo --version`，版本必须 ≥ 0.11.1。执行 `npm --version`，npm 必须在 daemon 的 PATH 中，因为 ccusage-stats 安装时会执行 `npm ci --omit=dev`。
 2. 从 `paseo daemon status --json` 取得 `home`，读取 `<home>/config.json` 中的 `pluginsEnabled`（缺失视为 false）。如果不是 true，先停下来征求我的同意，并提醒我：插件是受信任、无沙箱的代码，可以访问这台机器。我同意后，只把该字段设为 true，保留文件其余内容，然后执行 `paseo reload --json`。
-3. 执行 `paseo plugin ls`。对 `host-monitor`、`ccusage-stats`、`file-download` 和 `tab-recovery` 每个 ID 分别处理：未安装则执行 `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`；SOURCE 已经是本 GitHub 仓库则执行 `paseo plugin update <id> --yes`；从其他来源安装的，先问我再决定是否删除重装。
+3. 执行 `paseo plugin ls`。对 `host-monitor`、`ccusage-stats`、`file-download`、`tab-recovery` 和 `media-studio` 每个 ID 分别处理：未安装则执行 `paseo plugin install github:a31521424/paseo-kit:plugins/<id>`；SOURCE 已经是本 GitHub 仓库则执行 `paseo plugin update <id> --yes`；从其他来源安装的，先问我再决定是否删除重装。
 4. 执行 `paseo plugin ls`，每个插件都必须是 `running` 且没有错误。失败时把错误信息和 `paseo plugin logs <id>` 的输出给我。
 5. 汇报每个插件的 SOURCE 和 REVISION。
 ```
@@ -112,6 +126,7 @@ paseo plugin install github:a31521424/paseo-kit:plugins/host-monitor
 paseo plugin install github:a31521424/paseo-kit:plugins/ccusage-stats
 paseo plugin install github:a31521424/paseo-kit:plugins/file-download
 paseo plugin install github:a31521424/paseo-kit:plugins/tab-recovery
+paseo plugin install github:a31521424/paseo-kit:plugins/media-studio
 ```
 
 `ccusage-stats` 在 manifest 中声明了 `build: [["npm", "ci", "--omit=dev"]]`，Paseo 会按锁文件安装内置的 ccusage 二进制。其他插件只用 Paseo 提供的库。之后用 `paseo plugin update <id>` 更新。
@@ -127,6 +142,7 @@ paseo plugin install "$PWD/plugins/host-monitor"
 paseo plugin install "$PWD/plugins/ccusage-stats"
 paseo plugin install "$PWD/plugins/file-download"
 paseo plugin install "$PWD/plugins/tab-recovery"
+paseo plugin install "$PWD/plugins/media-studio"
 paseo plugin ls
 ```
 
