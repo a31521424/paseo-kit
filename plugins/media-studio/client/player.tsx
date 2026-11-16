@@ -587,7 +587,12 @@ function Player({ theme, compact, info, workspaceId, workspaceRoot, agentId, var
     if (!video) return;
     if (video.paused) {
       if (duration && video.currentTime >= duration - 0.05) seek(inPoint ?? 0);
-      void video.play().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+      void video.play().catch((reason: unknown) => {
+        // AbortError only means a pause() or a new source came before playback started (a second
+        // click, Space, a frame step, the engine restarting for a new file version); not a failure.
+        if ((reason as { name?: unknown } | null)?.name === "AbortError") return;
+        setError(reason instanceof Error ? reason.message : String(reason));
+      });
     } else {
       video.pause();
     }

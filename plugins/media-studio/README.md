@@ -30,6 +30,8 @@ Requires Paseo 0.15.3 or later (daemon and app) with plugins enabled, and ffmpeg
 | Hosts | `server/hosts.ts`: the daemon host, or `alias:/path` over multiplexed SSH, where the remote ffmpeg does the work. |
 | Transfers | `server/transfer.ts` and `client/transfers.ts`: 1 MB upload and 4 MB download pieces over plugin RPC, out of order, into a hidden part file renamed when complete. Uploads resume: the upload ID is derived from folder, name, size and modification time, received ranges are saved under `~/.cache/paseo-media-studio/uploads`, and `upload.begin` returns them. The client retries with backoff, pauses, and hands unfinished uploads to the next copy of itself when Paseo reloads the plugin. |
 | Agent tool and turn cards | `server/agent.ts`: `preview_media` through `agent.open.before`; a card appended after each turn's reply. `index.client.tsx` turns the tool call into the same card while it runs. |
+| Composer pill | `client/pill.tsx` and `server/project.ts`: a "Media N" pill for agents whose folder holds video or audio over 256 KB, or at least 20 images; it opens the media panel. Setting `composerPill`. |
+| `.ts` and `.mts` | Also TypeScript. The file panel does not claim them; scans and folder lists keep one only when its first bytes are a transport stream (`dropSourceCode` in `server/files.ts`). |
 
 Paseo 0.15 plugin RPC carries JSON only, so bytes travel as base64. Paseo 0.16 adds binary RPC and
 subscriptions, which would remove that overhead and the polling reads; the transport is kept behind

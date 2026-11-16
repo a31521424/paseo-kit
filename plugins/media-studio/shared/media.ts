@@ -14,6 +14,30 @@ export const IMAGE_EXTENSIONS = [
   "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tif", "tiff", "tga", "exr", "dpx", "heic", "heif", "avif",
 ] as const;
 
+/**
+ * Extensions that are also source code: `.ts` is TypeScript as often as MPEG transport stream, and
+ * `.mts` is a TypeScript module as often as AVCHD footage. Scans keep such a file only when its
+ * bytes are a transport stream, and the file panel never claims them, so code opens as code.
+ */
+export const AMBIGUOUS_VIDEO_EXTENSIONS: readonly string[] = ["ts", "mts"];
+
+export function isAmbiguousMedia(path: string): boolean {
+  return AMBIGUOUS_VIDEO_EXTENSIONS.includes(extensionOf(path));
+}
+
+/** Smaller than this, a `.ts` file is source code; a transport stream holds far more. */
+export const MIN_TRANSPORT_STREAM_BYTES = 16 * 1024;
+/** Bytes `looksLikeTransportStream` reads from the start of a file. */
+export const TRANSPORT_STREAM_HEAD_BYTES = 4 + 192 * 2 + 1;
+
+/** Sync byte 0x47 every 188 bytes (plain TS), or every 192 after a 4-byte timecode (M2TS, AVCHD). */
+export function looksLikeTransportStream(head: Uint8Array): boolean {
+  for (const [first, packet] of [[0, 188], [4, 192]] as const) {
+    if (head.length > first + packet * 2 && head[first] === 0x47 && head[first + packet] === 0x47 && head[first + packet * 2] === 0x47) return true;
+  }
+  return false;
+}
+
 /** Images Paseo's own image panel does not open; the file panel claims only these. */
 export const PANEL_IMAGE_EXTENSIONS = ["bmp", "tif", "tiff", "tga", "exr", "dpx", "heic", "heif", "avif"] as const;
 

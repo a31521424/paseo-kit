@@ -1,12 +1,13 @@
 import { settingsRpc } from "@getpaseo/plugin";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { CARD_KIND, CARD_MAX_FILES, CARD_VERSION, cardSchema, isPreviewToolName, parseToolInput, type CardData } from "./shared/cards";
-import { AUDIO_EXTENSIONS, PANEL_IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, joinPath } from "./shared/media";
+import { AMBIGUOUS_VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, PANEL_IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, joinPath } from "./shared/media";
 import { settingsDefinition } from "./shared/settings";
 import { MediaCard } from "./client/card";
 import { MediaFilePanel } from "./client/file-panel";
 import { messages } from "./client/i18n";
 import { MediaPanel } from "./client/media-panel";
+import { contributeMediaPills } from "./client/pill";
 import { SettingsScreen } from "./client/settings-screen";
 import { openInMediaPanel, setPluginClient } from "./client/state";
 import { adoptUploads, handOverUploads, uploadFiles } from "./client/transfers";
@@ -28,7 +29,11 @@ export default function contribute(client: PluginClientContext) {
     id: "player",
     title: messages.message("panel.filePanel"),
     icon: "Clapperboard",
-    files: { extensions: [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS, ...PANEL_IMAGE_EXTENSIONS] },
+    // Paseo matches by extension alone, so .ts and .mts stay with the code viewer; transport
+    // streams still open from the media panel, which checks the bytes.
+    files: {
+      extensions: [...VIDEO_EXTENSIONS.filter((ext) => !AMBIGUOUS_VIDEO_EXTENSIONS.includes(ext)), ...AUDIO_EXTENSIONS, ...PANEL_IMAGE_EXTENSIONS],
+    },
     Component: MediaFilePanel,
   });
 
@@ -108,7 +113,10 @@ export default function contribute(client: PluginClientContext) {
     },
   });
 
+  const stopPills = contributeMediaPills(client);
+
   return () => {
+    stopPills();
     handOverUploads();
     setPluginClient(null);
   };

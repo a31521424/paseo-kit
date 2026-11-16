@@ -297,3 +297,24 @@ export const notesRemoveRpc = defineRpc({
   input: z.object({ path: z.string().min(1), id: z.string() }),
   output: z.object({}),
 });
+
+export const projectSummarySchema = z.object({
+  dir: z.string(),
+  video: z.number(),
+  audio: z.number(),
+  image: z.number(),
+  /** Enough real footage, sound or stills that the folder looks like a media project, not code with a few assets. */
+  isMedia: z.boolean(),
+});
+export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+
+/** How much media each folder on the daemon host holds, from a quick bounded scan; for the composer pill. */
+export const projectSummaryRpc = defineRpc({
+  name: "media.project.summary",
+  input: z.object({
+    dirs: z.array(z.string().min(1)).max(200),
+    /** Scan again instead of answering from the last minute's results, as after a turn. */
+    fresh: z.boolean().default(false),
+  }),
+  output: z.object({ projects: z.array(projectSummarySchema) }),
+});

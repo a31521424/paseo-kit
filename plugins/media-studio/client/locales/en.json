@@ -144,6 +144,8 @@
     "agentToolHint": "Agents can show media in the chat as they make it. Applies to new and reopened sessions.",
     "turnCards": "Card after each turn",
     "turnCardsHint": "After the agent's reply, one card with the media the turn showed and the media files it created or changed in the agent's folder. Paseo folds finished turns, and this card stays in view.",
+    "composerPill": "Media pill in the composer",
+    "composerPillHint": "For agents whose folder holds video, audio or many images, a pill beside the composer with the media count; pressing it opens the media panel. Code folders stay without it.",
     "playbackTitle": "Playback",
     "quality": "Default quality",
     "qualityHint": "Auto sends H.264 video as it is and converts the rest to a 720p proxy.",
@@ -229,5 +231,9 @@
     "crop916": "9:16",
     "crop11": "1:1",
     "crop45": "4:5"
+  },
+  "pill": {
+    "title": "Media in this agent's folder: {{video}} video, {{audio}} audio, {{image}} images. Open the media panel",
+    "label": "Media {{count}}"
   }
 }

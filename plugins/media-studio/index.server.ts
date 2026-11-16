@@ -14,6 +14,7 @@ import {
   hostCheckRpc,
   imageRpc,
   listRpc,
+  projectSummaryRpc,
   loudnessRpc,
   notesAddRpc,
   notesListRpc,
@@ -32,6 +33,7 @@ import {
   uploadWriteRpc,
   waveformRpc,
 } from "./shared/rpc";
+import { projectSummaries } from "./server/project";
 import { DEFAULT_SETTINGS, settingsDefinition, type MediaStudioSettings } from "./shared/settings";
 import { registerAgentFeatures } from "./server/agent";
 import { loudness } from "./server/loudness";
@@ -142,6 +144,8 @@ export default function contribute(server: PluginServerContext) {
     const result = mode === "recent" ? await listRecent(folder.host, folder.path, limit) : await listFolder(folder.host, folder.path, limit);
     return { dir: folder.ref, ...result };
   });
+
+  server.handle(projectSummaryRpc, async ({ dirs, fresh }) => ({ projects: await projectSummaries(dirs, fresh) }));
 
   server.handle(grabRpc, async ({ path: file, cwd, time, root }) => {
     // Frames land in the workspace on the daemon host, even from a remote file, so the agent can open them.

@@ -19,6 +19,8 @@ export const settingsDefinition = defineSettings({
     agentToolProviders: z.string().default("claude, codex, opencode"),
     /** Add a card after each turn listing the media files the turn created or changed. */
     turnCards: z.boolean().default(true),
+    /** A pill in the composer of agents whose folder holds media, opening the media panel. */
+    composerPill: z.boolean().default(true),
     quality: z.enum(["auto", "original", "1080", "720", "480"]).default("auto"),
     /** Convert with VideoToolbox (Mac) or NVENC (NVIDIA) when the host has a working one. */
     hardwareEncoding: z.boolean().default(true),

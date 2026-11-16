@@ -141,6 +141,8 @@
     "agentToolHint": "agent 产出媒体时可以直接在对话里展示。对新建和重新打开的会话生效。",
     "turnCards": "每轮结束后的卡片",
     "turnCardsHint": "在 agent 回复之后追加一张卡片，汇总本轮展示过的媒体和在 agent 目录里新增或修改的媒体文件。Paseo 会折叠已完成的轮次，这张卡片始终可见。",
+    "composerPill": "输入框旁的素材胶囊",
+    "composerPillHint": "Agent 目录里有视频、音频或大量图片时，在输入框旁显示素材数量胶囊，点击打开媒体面板。代码目录不显示。",
     "playbackTitle": "播放",
     "quality": "默认画质",
     "qualityHint": "自动：H.264 视频直接发送原片，其他格式转成 720p 代理。",
@@ -226,5 +228,9 @@
     "crop916": "9:16",
     "crop11": "1:1",
     "crop45": "4:5"
+  },
+  "pill": {
+    "title": "Agent 目录里的媒体：视频 {{video}}，音频 {{audio}}，图片 {{image}}。打开媒体面板",
+    "label": "素材 {{count}}"
   }
 }

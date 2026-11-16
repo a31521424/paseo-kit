@@ -5,7 +5,7 @@ import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, mediaKindOf, type MediaKind } from "../shared/media";
 import { run, type RunResult } from "./ffmpeg";
-import { scanMedia as scanLocal, type ScannedFile } from "./files";
+import { dropSourceCode, scanMedia as scanLocal, type ScannedFile } from "./files";
 
 // Media can live on the daemon host or on a machine the daemon reaches over SSH, such as a GPU
 // server an agent renders on. A remote file is written `alias:/absolute/path`, with an alias from
@@ -608,7 +608,7 @@ class RemoteHost implements MediaHost {
       const kind: MediaKind | null = mediaKindOf(file);
       if (kind) files.push({ path: file, kind, size: Number(size), mtimeMs: Number(mtime) * 1000 });
     }
-    return { files, truncated: lines.length > 20_000 };
+    return { files: await dropSourceCode(files, (entry) => entry, (entry, length) => this.readRange(entry, 0, length)), truncated: lines.length > 20_000 };
   }
 
   home(): Promise<string> {

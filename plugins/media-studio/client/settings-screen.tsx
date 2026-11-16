@@ -67,6 +67,7 @@ export function SettingsScreen({ theme }: PluginSurfaceProps) {
         <SettingsCard>
           <SettingsSwitch label={t("settings.agentTool")} hint={t("settings.agentToolHint")} value={values.agentTool} onValueChange={(agentTool) => save({ agentTool })} />
           <SettingsSwitch label={t("settings.turnCards")} hint={t("settings.turnCardsHint")} value={values.turnCards} onValueChange={(turnCards) => save({ turnCards })} />
+          <SettingsSwitch label={t("settings.composerPill")} hint={t("settings.composerPillHint")} value={values.composerPill} onValueChange={(composerPill) => save({ composerPill })} />
         </SettingsCard>
       </SettingsSection>
 

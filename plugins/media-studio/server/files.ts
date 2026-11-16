@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { mediaKindOf, type MediaKind } from "../shared/media";
+import { MIN_TRANSPORT_STREAM_BYTES, TRANSPORT_STREAM_HEAD_BYTES, isAmbiguousMedia, looksLikeTransportStream, mediaKindOf, type MediaKind } from "../shared/media";
 import type { MediaEntry } from "../shared/rpc";
 import { refOf, type MediaHost } from "./hosts";
 
@@ -12,6 +12,45 @@ export interface ScannedFile {
   kind: MediaKind;
   size: number;
   mtimeMs: number;
+}
+
+/**
+ * Drops `.ts` and `.mts` files that are source code rather than transport streams: small ones
+ * outright, the rest by their first bytes. Other files pass untouched.
+ */
+export async function dropSourceCode<T>(
+  items: T[],
+  fileOf: (item: T) => { path: string; size: number } | null,
+  readHead: (file: string, length: number) => Promise<Uint8Array>,
+): Promise<T[]> {
+  const verdicts = items.map(() => true);
+  const pending: number[] = [];
+  items.forEach((item, index) => {
+    const file = fileOf(item);
+    if (!file || !isAmbiguousMedia(file.path)) return;
+    if (file.size < MIN_TRANSPORT_STREAM_BYTES) verdicts[index] = false;
+    else pending.push(index);
+  });
+  // A few reads at a time: on an SSH host each one is a command over the shared connection.
+  const worker = async () => {
+    for (let index = pending.shift(); index !== undefined; index = pending.shift()) {
+      const head = await readHead(fileOf(items[index]!)!.path, TRANSPORT_STREAM_HEAD_BYTES).catch(() => new Uint8Array(0));
+      verdicts[index] = looksLikeTransportStream(head);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return items.filter((_, index) => verdicts[index]);
+}
+
+async function readLocalHead(file: string, length: number): Promise<Uint8Array> {
+  const handle = await fs.open(file, "r");
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
 }
 
 interface ScanOptions {
@@ -35,7 +74,7 @@ export async function scanMedia(root: string, options: ScanOptions = {}): Promis
   while (queue.length > 0) {
     const next: typeof queue = [];
     for (const { dir, depth } of queue) {
-      if (seen >= maxEntries || Date.now() > deadline) return { files, truncated: true };
+      if (seen >= maxEntries || Date.now() > deadline) return { files: await dropSourceCode(files, (file) => file, readLocalHead), truncated: true };
       const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
       seen += entries.length;
       const statTasks: Promise<void>[] = [];
@@ -83,7 +122,7 @@ export async function scanMedia(root: string, options: ScanOptions = {}): Promis
     }
     queue = next;
   }
-  return { files, truncated: false };
+  return { files: await dropSourceCode(files, (file) => file, readLocalHead), truncated: false };
 }
 
 export async function listRecent(host: MediaHost, root: string, limit: number): Promise<{ entries: MediaEntry[]; truncated: boolean }> {
@@ -103,7 +142,12 @@ export async function listRecent(host: MediaHost, root: string, limit: number): 
 
 export async function listFolder(host: MediaHost, dir: string, limit: number): Promise<{ entries: MediaEntry[]; truncated: boolean }> {
   const result: MediaEntry[] = [];
-  for (const entry of await host.listDir(dir)) {
+  const entries = await dropSourceCode(
+    await host.listDir(dir),
+    (entry) => (entry.isDirectory ? null : { path: path.posix.join(dir, entry.name), size: entry.size }),
+    (file, length) => host.readRange(file, 0, length),
+  );
+  for (const entry of entries) {
     const kind = entry.isDirectory ? "directory" : mediaKindOf(entry.name);
     if (!kind) continue;
     result.push({
