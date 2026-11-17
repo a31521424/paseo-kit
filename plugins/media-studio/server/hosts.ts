@@ -105,8 +105,10 @@ async function findLocalBinary(configuredPath: string, name: string, extra: stri
     path.join("/usr/local/bin", name),
     path.join("/usr/bin", name),
   ];
+  // Windows executables carry an .exe extension; a bare "ffmpeg" never exists there.
+  const suffix = process.platform === "win32" ? ".exe" : "";
   for (const candidate of candidates) {
-    if (await isExecutable(candidate)) return candidate;
+    if (await isExecutable(candidate + suffix)) return candidate + suffix;
   }
   return null;
 }
