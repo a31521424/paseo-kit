@@ -23,6 +23,7 @@ complete, self-contained Paseo plugin project.
 - One sidebar footer line: CPU, RAM and disk percentage with small meters, then download and upload speed under one icon.
 - Yellow above 70%, red above 90%; on a narrow sidebar network speed is dropped first, then disk.
 - Popover with about three minutes of history per metric, usage of each local disk, uptime and load average.
+- **Host monitor** screen with the same readout. Its header host picker selects the host the sidebar line shows.
 - Samples every 2 s on the daemon, keeps history in memory. Network speed needs Linux.
 
 ### ccusage-stats
