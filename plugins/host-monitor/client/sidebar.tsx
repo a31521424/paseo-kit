@@ -1,9 +1,10 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import type { PluginPopoverProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
+import type { PluginPopoverProps, PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useCallback, useState } from "react";
 import {
   Pressable,
+  ScrollView,
   Text,
   View,
   type LayoutChangeEvent,
@@ -389,26 +390,17 @@ function DiskSection({ theme, disks }: { theme: PluginTheme; disks: HostStats["d
   );
 }
 
-function HostPopover({ theme, layout }: PluginPopoverProps) {
+/** The full readout: the popover and the screen show the same content. */
+function HostDetails({ theme }: { theme: PluginTheme }) {
   const { data } = useHostStats();
-  const rootStyle = {
-    gap: 10,
-    padding: layout.compact ? 16 : 12,
-    minWidth: 240,
-    backgroundColor: theme.colors.surface1,
-  };
   if (!data) {
-    return (
-      <View style={rootStyle}>
-        <Text style={{ color: theme.colors.foregroundMuted, fontSize: FONT_SIZE }}>Loading...</Text>
-      </View>
-    );
+    return <Text style={{ color: theme.colors.foregroundMuted, fontSize: FONT_SIZE }}>Loading...</Text>;
   }
 
   const { current, history, memory, network, disks } = data;
 
   return (
-    <View style={rootStyle}>
+    <>
       <View style={{ gap: 2 }}>
         <Text style={{ color: theme.colors.foreground, fontSize: FONT_SIZE + 1 }}>{data.hostname}</Text>
         <Text style={{ color: theme.colors.foregroundMuted, fontSize: FONT_SIZE - 1 }}>
@@ -454,6 +446,55 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
         </>
       ) : null}
       {disks.length > 0 ? <DiskSection theme={theme} disks={disks} /> : null}
+    </>
+  );
+}
+
+function HostPopover({ theme, layout, close, openScreen }: PluginPopoverProps) {
+  return (
+    <View
+      style={{ gap: 10, padding: layout.compact ? 16 : 12, minWidth: 240, backgroundColor: theme.colors.surface1 }}
+    >
+      <HostDetails theme={theme} />
+      {/* The screen header has the host picker, and the footer line follows the host picked there. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open the host monitor screen to pick another host"
+        onPress={() => {
+          close();
+          openScreen({ screenId: HOST_SCREEN_ID });
+        }}
+        style={({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          gap: ICON_GAP,
+          paddingVertical: 4,
+          borderRadius: 6,
+          backgroundColor: hovered ? theme.colors.surface2 : undefined,
+        })}
+      >
+        <Icon name="Server" size={ICON_SIZE} color={theme.colors.foregroundMuted} />
+        <Text style={{ flex: 1, color: theme.colors.foregroundMuted, fontSize: FONT_SIZE }}>
+          Other hosts
+        </Text>
+        <Icon name="ChevronRight" size={ICON_SIZE} color={theme.colors.foregroundMuted} />
+      </Pressable>
     </View>
+  );
+}
+
+export const HOST_SCREEN_ID = "host";
+
+export function HostScreen({ theme, layout }: PluginScreenProps) {
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: theme.colors.surface0 }}
+      contentContainerStyle={{ gap: 12, padding: layout.compact ? 16 : 24, maxWidth: 560 }}
+    >
+      <Text style={{ color: theme.colors.foregroundMuted, fontSize: FONT_SIZE }}>
+        Pick a host in the header. The sidebar line follows the host picked here.
+      </Text>
+      <HostDetails theme={theme} />
+    </ScrollView>
   );
 }
