@@ -13,7 +13,7 @@ complete, self-contained Paseo plugin project.
 | ID | Name | What it does |
 | --- | --- | --- |
 | [`host-monitor`](plugins/host-monitor) | Host monitor | CPU, RAM, disk and network speed of the daemon host in the sidebar footer, with a history popover. |
-| [`ccusage-stats`](plugins/ccusage-stats) | Token usage | Token usage and estimated cost of your coding agents via [ccusage](https://github.com/ccusage/ccusage): today's total, day/week/month breakdown by agent, and a per-session composer pill. |
+| [`ccusage-stats`](plugins/ccusage-stats) | Token usage | Token usage and estimated cost of your coding agents via [ccusage](https://github.com/ccusage/ccusage): today's total, day/week/month breakdown by agent, a per-session composer pill, and optional Claude plan limits. |
 | [`file-download`](plugins/file-download) | Download file | Cmd+S or Ctrl+S downloads the file you are previewing, including files outside the workspace such as `/tmp`. |
 | [`tab-recovery`](plugins/tab-recovery) | Closed agents | Lists the agents whose tab was closed (which archives them) in the current workspace and reopens one with a press. |
 | [`media-studio`](plugins/media-studio) | Media studio | Review the images, video and audio agents make: chat cards, a streaming player with a filmstrip and waveform timeline, timecoded notes to the agent, large uploads and downloads, files on SSH hosts. |
@@ -35,6 +35,11 @@ complete, self-contained Paseo plugin project.
 - A composer pill on each agent with the token total of its current provider session.
 - Counts every agent ccusage supports (Claude Code, Codex, Gemini CLI, OpenCode, Amp, ...).
   Costs are offline estimates at API list prices. Nothing is sent off the host.
+- Optional, off by default: Claude plan limits (5-hour and weekly) in the sidebar, popover and
+  Details screen. When turned on in the plugin settings, the daemon runs Claude Code's own
+  `/usage` on its host (at most every 5 minutes, only while Paseo is open; an interactive session
+  through `script` for `claude setup-token` tokens). Claude Code fetches the numbers with its own
+  sign-in; the plugin never reads a Claude token and makes no network requests itself.
 
 ### file-download
 

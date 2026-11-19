@@ -24,6 +24,9 @@ jobs:
           cache-dependency-path: plugins/${{ matrix.plugin }}/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - name: Unit tests
+        if: matrix.plugin == 'ccusage-stats'
+        run: npm test
       - name: Mobile audit (client/)
         run: |
           hits=$(grep -rnE "document\.|window\.|localStorage|navigator\.|className=|onClick=" client/ --include='*.ts' --include='*.tsx' | grep -v '^client/web\.ts:' || true)

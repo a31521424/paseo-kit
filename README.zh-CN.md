@@ -11,7 +11,7 @@
 | ID | 名称 | 功能 |
 | --- | --- | --- |
 | [`host-monitor`](plugins/host-monitor) | Host monitor | 在侧边栏底部显示 daemon 主机的 CPU、内存、磁盘和网速，点击查看历史曲线。 |
-| [`ccusage-stats`](plugins/ccusage-stats) | Token usage | 基于 [ccusage](https://github.com/ccusage/ccusage) 统计编码 agent 的 token 消耗与估算费用：今日总量、按日/周/月分 agent 分析、当前 session 消耗。 |
+| [`ccusage-stats`](plugins/ccusage-stats) | Token usage | 基于 [ccusage](https://github.com/ccusage/ccusage) 统计编码 agent 的 token 消耗与估算费用：今日总量、按日/周/月分 agent 分析、当前 session 消耗，以及可选的 Claude 订阅额度。 |
 | [`file-download`](plugins/file-download) | Download file | 用 Cmd+S 或 Ctrl+S 下载当前预览的文件，包括 `/tmp` 等工作区外的文件。 |
 | [`tab-recovery`](plugins/tab-recovery) | Closed agents | 列出当前工作区里被关闭（即被归档）的 agent，一键重新打开。 |
 | [`media-studio`](plugins/media-studio) | Media studio | 审看 agent 产出的图片、视频和音频：对话内卡片、带胶片条和波形时间线的流式播放器、带时间码的批注回传给 agent、大文件上传下载、支持 SSH 远程主机上的文件。 |
@@ -30,6 +30,7 @@
 - 完整的 **Token usage** 页面（也可从 Command Center 打开）：30 天 / 12 周 / 12 个月历史、每百万 token 成本、缓存命中率、按 agent 和模型拆分、最近的 session。
 - 每个 agent 的输入框上方有一个 pill，显示当前 provider session 的 token 总量。
 - 统计 ccusage 支持的所有 agent（Claude Code、Codex、Gemini CLI、OpenCode、Amp 等）。费用为按 API 标价离线估算，不向外发送任何数据。
+- 可选、默认关闭：Claude 订阅额度（5 小时窗口和每周窗口），显示在侧边栏、弹出层和 Details 页。在插件设置里开启后，daemon 会在其主机上执行 Claude Code 自带的 `/usage`（最多每 5 分钟一次，且只在有 Paseo 界面打开时）；使用 `claude setup-token` 的 token 时，会通过系统 `script` 命令开一个交互式 Claude Code 会话读取 `/usage`。数据由 Claude Code 用它自己的登录去获取，插件不读取 Claude token，自身也不发任何网络请求。
 
 ### file-download
 

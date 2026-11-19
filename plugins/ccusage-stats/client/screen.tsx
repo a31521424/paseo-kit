@@ -16,6 +16,12 @@ import {
   formatTokens,
   shortSessionId,
 } from "./format";
+import {
+  ClaudeLimitsOffNote,
+  ClaudeLimitsSection,
+  LimitsRefreshButton,
+  useClaudeLimits,
+} from "./limits";
 import { AgentList, Composition, FONT, Headline } from "./summary";
 
 type HoverState = PressableStateCallbackType & { hovered?: boolean };
@@ -240,6 +246,8 @@ function Body({
         </View>
       ) : null}
 
+      <LimitsCard theme={theme} />
+
       <Card theme={theme} title="Tokens">
         <Headline
           theme={theme}
@@ -304,7 +312,19 @@ function Body({
         Read by ccusage from local agent logs on this host. Costs are estimates from ccusage's
         built-in pricing table, not your bill.
       </Text>
+      <ClaudeLimitsOffNote theme={theme} />
     </View>
+  );
+}
+
+/** Claude plan limits, only once they are turned on in the settings. */
+function LimitsCard({ theme }: { theme: PluginTheme }) {
+  const { data } = useClaudeLimits();
+  if (!data?.enabled) return null;
+  return (
+    <Card theme={theme} title="Claude plan limits" trailing={<LimitsRefreshButton theme={theme} />}>
+      <ClaudeLimitsSection theme={theme} />
+    </Card>
   );
 }
 
