@@ -1,8 +1,11 @@
 import v8 from "node:v8";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { createAgentStore } from "./server/agent-store";
+import { createClaudeLogs } from "./server/claude-logs";
 import { createReportCache } from "./server/report";
 import { createSessionMatcher } from "./server/sessions";
-import { sessionUsageRpc, usageReportRpc } from "./shared/usage";
+import { createSubagentPricer } from "./server/subagents";
+import { sessionDetailRpc, sessionUsageRpc, usageReportRpc } from "./shared/usage";
 
 // The plugin process validates every daemon message with one generated function of about 11 MB
 // (`safeParse_WSOutboundMessageSchema` in @getpaseo/protocol). Once it is hot, V8's Maglev compiler
@@ -14,9 +17,11 @@ v8.setFlagsFromString("--no-maglev");
 
 export default function contribute(server: PluginServerContext) {
   const cache = createReportCache();
-  const matcher = createSessionMatcher(cache);
+  const pricer = createSubagentPricer(cache.timezone);
+  const matcher = createSessionMatcher(cache, createClaudeLogs(), pricer, createAgentStore());
   server.handle(usageReportRpc, () => cache.read());
   server.handle(sessionUsageRpc, (input, { paseo }) => matcher.resolve(input, paseo));
+  server.handle(sessionDetailRpc, (input, { paseo }) => matcher.detail(input, paseo));
   // A finished turn has written new usage to the agent's logs.
   server.on("agent.turn_ended", (event) => {
     matcher.forget(event.agent.id);

@@ -1,132 +1,12 @@
-import type {
-  PluginButtonContentProps,
-  PluginButtonRegistration,
-  PluginClientContext,
-} from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
-import { Text, View } from "react-native";
+import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { sessionUsageRpc, type SessionMatch } from "../shared/usage";
-import { useSessionUsage } from "./data";
-import { agentLabel, formatAgo, formatCost, formatTokens, shortSessionId } from "./format";
-import { Composition, FONT } from "./summary";
+import { formatCost, formatTokens } from "./format";
 
 const PILL_ID = "session-usage";
+export const SESSION_PANEL_ID = "session-usage";
 const PILL_REFRESH_MS = 60_000;
 // The daemon refreshes its report a few seconds after a turn ends; ask after that.
 const AFTER_TURN_DELAY_MS = 8_000;
-
-function SessionUsageContent({ theme, layout, ...target }: PluginButtonContentProps) {
-  const agentId = target.context === "agent" ? target.agentId : "";
-  const { data, error, isPending } = useSessionUsage(agentId);
-  const rootStyle = { gap: 12, padding: layout.compact ? 4 : 0, minWidth: 260 };
-  const note = (text: string, color = theme.colors.foregroundMuted) => (
-    <Text style={{ fontSize: FONT.body, color }}>{text}</Text>
-  );
-
-  if (!data) {
-    return (
-      <View style={rootStyle}>
-        {isPending
-          ? note("Reading usage logs...")
-          : note(error?.message ?? "Usage is unavailable.", theme.colors.statusDanger)}
-      </View>
-    );
-  }
-  if (data.status === "unknown") {
-    return (
-      <View style={rootStyle}>{note("This agent has not started a provider session yet.")}</View>
-    );
-  }
-  if (data.status === "pending") {
-    return (
-      <View style={rootStyle}>
-        {note(`No usage recorded yet for session ${shortSessionId(data.providerSessionId)}.`)}
-        {note(
-          "ccusage reads Claude Code, Codex and other supported agents' logs. Usage appears after the first turn.",
-        )}
-      </View>
-    );
-  }
-
-  const { session } = data;
-  return (
-    <View style={rootStyle}>
-      <View style={{ gap: 2 }}>
-        <Text style={{ fontSize: FONT.caption, color: theme.colors.foregroundMuted }}>
-          This session
-        </Text>
-        <View
-          style={{ flexDirection: "row", alignItems: "baseline", columnGap: 8, flexWrap: "wrap" }}
-        >
-          <Text
-            style={{
-              fontSize: 22,
-              fontWeight: "600",
-              color: theme.colors.foreground,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {formatTokens(session.usage.totalTokens)}
-          </Text>
-          <Text style={{ fontSize: FONT.body, color: theme.colors.foregroundMuted }}>tokens</Text>
-          <Text
-            style={{
-              fontSize: FONT.title,
-              color: theme.colors.foreground,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {formatCost(session.usage.cost)}
-          </Text>
-        </View>
-      </View>
-      <Composition theme={theme} usage={session.usage} />
-      {session.models.length > 0 ? (
-        <View style={{ gap: 4 }}>
-          {session.models.map((model) => (
-            <View key={model.model} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text
-                numberOfLines={1}
-                style={{ flex: 1, fontSize: FONT.body, color: theme.colors.foreground }}
-              >
-                {model.model}
-              </Text>
-              <Text
-                style={{
-                  fontSize: FONT.body,
-                  color: theme.colors.foreground,
-                  fontVariant: ["tabular-nums"],
-                }}
-              >
-                {formatTokens(model.usage.totalTokens)}
-              </Text>
-              <Text
-                style={{
-                  width: 52,
-                  textAlign: "right",
-                  fontSize: FONT.body,
-                  color: theme.colors.foregroundMuted,
-                  fontVariant: ["tabular-nums"],
-                }}
-              >
-                {formatCost(model.usage.cost)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <Icon name="Link" size={12} color={theme.colors.foregroundMuted} />
-        <Text style={{ flex: 1, fontSize: FONT.caption, color: theme.colors.foregroundMuted }}>
-          {agentLabel(session.agent)} session {shortSessionId(session.id)}
-          {session.lastActivity
-            ? ` · last activity ${formatAgo(Date.parse(session.lastActivity))}`
-            : ""}
-        </Text>
-      </View>
-    </View>
-  );
-}
 
 function pillLabel(match: SessionMatch | undefined): {
   visible: boolean;
@@ -153,6 +33,10 @@ interface AgentLike {
 /**
  * A composer pill per agent with this session's token total. Pills stay hidden until ccusage has
  * usage for the agent's provider session, so agents ccusage cannot read show nothing.
+ *
+ * Pressing a pill opens the session panel rather than a popover: Paseo 0.11.2 keeps one open flag
+ * per pill and can mount an agent's composer more than once, so a popover also opened, unanchored,
+ * in the window's top-left corner.
  */
 export function contributeSessionPills(client: PluginClientContext): () => void {
   const pills = new Map<string, PluginButtonRegistration>();
@@ -191,17 +75,21 @@ export function contributeSessionPills(client: PluginClientContext): () => void 
         scheduleRefresh(AFTER_TURN_DELAY_MS);
       return false;
     }
+    const { workspaceId } = agent;
     pills.set(
       agent.id,
       client.addComposerPill({
         id: PILL_ID,
-        workspaceId: agent.workspaceId,
+        workspaceId,
         agentId: agent.id,
         button: {
           title: "Session token usage",
           icon: "Coins",
           visible: false,
-          behavior: { kind: "popover", Content: SessionUsageContent },
+          behavior: {
+            kind: "action",
+            onPress: () => client.openPanel(SESSION_PANEL_ID, { workspaceId, agentId: agent.id }),
+          },
         },
       }),
     );

@@ -2,11 +2,11 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import {
+  addUsage,
   EMPTY_USAGE,
-  sessionUsageRpc,
+  sessionDetailRpc,
   usageReportRpc,
   type AgentUsage,
-  type Usage,
   type UsagePeriod,
 } from "../shared/usage";
 
@@ -27,14 +27,13 @@ export function useUsageReport() {
   });
 }
 
-export function useSessionUsage(agentId: string) {
-  const getSessions = useRpc(sessionUsageRpc);
+export type SessionDetail = RpcOutput<typeof sessionDetailRpc>;
+
+export function useSessionDetail(agentId: string) {
+  const getDetail = useRpc(sessionDetailRpc);
   return useQuery({
-    queryKey: ["session-usage", agentId],
-    queryFn: async () => {
-      const { sessions } = await getSessions({ agentIds: [agentId] });
-      return sessions[0] ?? { status: "unknown" as const, agentId };
-    },
+    queryKey: ["session-detail", agentId],
+    queryFn: () => getDetail({ agentId }),
     refetchInterval: SESSION_REFRESH_MS,
   });
 }
@@ -119,17 +118,6 @@ export function agentSwatch(theme: PluginTheme, agents: readonly string[], agent
   const index = agents.indexOf(agent);
   if (index < 0 || index >= MAX_NAMED_AGENTS) return { color: theme.colors.border, opacity: 1 };
   return steps[index] ?? { color: theme.colors.border, opacity: 1 };
-}
-
-function addUsage(a: Usage, b: Usage): Usage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    cacheCreationTokens: a.cacheCreationTokens + b.cacheCreationTokens,
-    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
-    totalTokens: a.totalTokens + b.totalTokens,
-    cost: a.cost + b.cost,
-  };
 }
 
 /** A period's agents in report order, with anything past the named slots folded into "Other". */

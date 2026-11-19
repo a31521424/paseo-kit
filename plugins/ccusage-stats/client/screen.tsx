@@ -22,7 +22,7 @@ type HoverState = PressableStateCallbackType & { hovered?: boolean };
 
 const MAX_CONTENT_WIDTH = 880;
 
-function Card({
+export function Card({
   theme,
   title,
   trailing,
@@ -62,7 +62,7 @@ function Card({
   );
 }
 
-function Stat({
+export function Stat({
   theme,
   label,
   value,

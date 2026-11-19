@@ -162,6 +162,8 @@ interface Snapshot {
 }
 
 export interface ReportCache {
+  /** The daemon's timezone, which ccusage groups days and weeks by. */
+  timezone: string;
   read(): Promise<UsageReport>;
   /** Every session ccusage knows, for matching Paseo agents. */
   sessions(): Promise<SessionUsage[]>;
@@ -222,6 +224,7 @@ export function createReportCache(): ReportCache {
   };
 
   return {
+    timezone,
     async read() {
       const { report } = await current();
       return { ...report, refreshError };

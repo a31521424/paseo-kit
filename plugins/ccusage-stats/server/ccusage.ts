@@ -100,22 +100,29 @@ export type RawAgentRow = z.infer<typeof rawAgentRow>;
 export type RawRow = z.infer<typeof rawRow>;
 export type RawReport = z.infer<typeof rawReport>;
 
-/**
- * One ccusage run loads every detected agent's logs once and emits all sections. `--offline`
- * prices from the pricing table built into ccusage instead of fetching LiteLLM's on every run.
- */
-export function runCcusage(timezone: string, signal?: AbortSignal): Promise<RawReport> {
+const rawClaudeSessions = z.object({
+  sessions: z
+    .array(
+      z.object({
+        sessionId: z.string(),
+        totalTokens: z.number().default(0),
+        totalCost: z.number().default(0),
+        lastActivity: z.string().optional(),
+        modelBreakdowns: z.array(rawModel).default([]),
+        ...rawUsage,
+      }),
+    )
+    .default([]),
+});
+
+export type RawClaudeSession = z.infer<typeof rawClaudeSessions>["sessions"][number];
+
+function execCcusage<T>(
+  args: string[],
+  schema: z.ZodType<T>,
+  options: { signal?: AbortSignal; env?: NodeJS.ProcessEnv },
+): Promise<T> {
   const binary = locateCcusage();
-  const args = [
-    "--json",
-    "--offline",
-    "--sections",
-    "daily,weekly,monthly,session",
-    "--by-agent",
-    "--timezone",
-    timezone,
-    "--no-color",
-  ];
   return new Promise((resolve, reject) => {
     execFile(
       binary.file,
@@ -123,8 +130,8 @@ export function runCcusage(timezone: string, signal?: AbortSignal): Promise<RawR
       {
         timeout: RUN_TIMEOUT_MS,
         maxBuffer: MAX_OUTPUT_BYTES,
-        signal,
-        env: { ...process.env, NO_COLOR: "1" },
+        signal: options.signal,
+        env: { ...process.env, ...options.env, NO_COLOR: "1" },
         windowsHide: true,
       },
       (error, stdout, stderr) => {
@@ -137,11 +144,46 @@ export function runCcusage(timezone: string, signal?: AbortSignal): Promise<RawR
           return;
         }
         try {
-          resolve(rawReport.parse(JSON.parse(stdout)));
+          resolve(schema.parse(JSON.parse(stdout)));
         } catch (parseError) {
           reject(new Error(`Unexpected ccusage output: ${(parseError as Error).message}`));
         }
       },
     );
   });
+}
+
+/**
+ * One ccusage run loads every detected agent's logs once and emits all sections. `--offline`
+ * prices from the pricing table built into ccusage instead of fetching LiteLLM's on every run.
+ */
+export function runCcusage(timezone: string, signal?: AbortSignal): Promise<RawReport> {
+  const args = [
+    "--json",
+    "--offline",
+    "--sections",
+    "daily,weekly,monthly,session",
+    "--by-agent",
+    "--timezone",
+    timezone,
+    "--no-color",
+  ];
+  return execCcusage(args, rawReport, { signal });
+}
+
+/**
+ * Claude Code sessions under `configDir/projects` only, priced the same way as the full report.
+ * ccusage names each session after its log file.
+ */
+export async function runClaudeSessions(
+  configDir: string,
+  timezone: string,
+  signal?: AbortSignal,
+): Promise<RawClaudeSession[]> {
+  const args = ["claude", "session", "--json", "--offline", "--timezone", timezone, "--no-color"];
+  const report = await execCcusage(args, rawClaudeSessions, {
+    signal,
+    env: { CLAUDE_CONFIG_DIR: configDir },
+  });
+  return report.sessions;
 }
