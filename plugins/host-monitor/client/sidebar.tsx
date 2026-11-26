@@ -1,5 +1,9 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import type { PluginPopoverProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
+import {
+  useSettings,
+  type PluginPopoverProps,
+  type PluginSidebarItemProps,
+} from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useCallback, useState } from "react";
 import {
@@ -9,7 +13,8 @@ import {
   type LayoutChangeEvent,
   type PressableStateCallbackType,
 } from "react-native";
-import type { hostStatsRpc } from "../shared/stats";
+import { displaySettings, hiddenMetrics, type MetricKey } from "../shared/settings";
+import { sumGpuMemory, type GpuUsage, type hostStatsRpc } from "../shared/stats";
 import { formatBytes, formatCompactRate, formatPercent, formatRate, formatUptime } from "./format";
 import {
   Meter,
@@ -22,6 +27,7 @@ import {
   scaleToPeak,
   severityColor,
   sumDisks,
+  temperatureSeverity,
   useHostStats,
   type Severity,
 } from "./stats";
@@ -40,8 +46,6 @@ const PAIR_SEPARATOR_WIDTH = 8;
 
 type HostStats = RpcOutput<typeof hostStatsRpc>;
 
-type MetricKey = "cpu" | "memory" | "disk" | "network";
-
 /** Which metrics fit, and whether the percentages get meters. */
 interface LineLayout {
   shown: readonly Metric[];
@@ -53,55 +57,88 @@ interface Metric {
   icon: string;
   /** One number, or two (download and upload) sharing the icon. */
   texts: readonly string[];
+  /** What a screen reader says for it. */
+  spoken: string;
   percent?: number;
-  /** Sets the color of a metric with a percent. */
+  /** Sets the color of the value. */
   severity?: Severity;
 }
 
-// On a narrow sidebar, network goes first, then disk; CPU and RAM always stay.
-const DROP_ORDER: readonly MetricKey[] = ["network", "disk"];
+// On a narrow sidebar these go first, in this order; CPU, RAM and GPU usage always stay.
+const DROP_ORDER: readonly MetricKey[] = ["network", "disk", "vram", "gpuPower", "gpuTemp", "cpuTemp"];
 
+function formatWatts(watts: number): string {
+  return `${Math.round(watts)}W`;
+}
+
+function formatTemperature(celsius: number): string {
+  return `${Math.round(celsius)}°`;
+}
+
+/** Every figure the host reports, in line order; a figure it cannot report is left out. */
 function metricsOf(stats: HostStats): Metric[] {
   const { current, memory, network, disks } = stats;
-  const ram = memoryPercent(memory);
-  const metrics: Metric[] = [
-    {
-      key: "cpu",
-      icon: "Cpu",
-      texts: [formatPercent(current.cpuPercent)],
-      percent: current.cpuPercent,
-      severity: percentSeverity(current.cpuPercent),
-    },
-    {
-      key: "memory",
-      icon: "MemoryStick",
-      texts: [formatPercent(ram)],
-      percent: ram,
-      severity: memorySeverity(memory),
-    },
-  ];
-  if (disks.length > 0) {
-    const { percent } = sumDisks(disks);
+  const metrics: Metric[] = [];
+  const percent = (key: MetricKey, icon: string, name: string, value: number, severity?: Severity) =>
     metrics.push({
-      key: "disk",
-      icon: "HardDrive",
-      texts: [formatPercent(percent)],
-      percent,
-      severity: percentSeverity(percent),
+      key,
+      icon,
+      texts: [formatPercent(value)],
+      spoken: `${name} ${formatPercent(value)}`,
+      percent: value,
+      severity: severity ?? percentSeverity(value),
     });
+  const temperature = (key: MetricKey, name: string, celsius: number) =>
+    metrics.push({
+      key,
+      icon: "Thermometer",
+      texts: [formatTemperature(celsius)],
+      spoken: `${name} ${Math.round(celsius)} degrees Celsius`,
+      severity: temperatureSeverity(celsius),
+    });
+
+  percent("cpu", "Cpu", "CPU", current.cpuPercent);
+  if (current.cpuTemperatureCelsius !== null) {
+    temperature("cpuTemp", "CPU temperature", current.cpuTemperatureCelsius);
   }
+  const ram = memoryPercent(memory);
+  metrics.push({
+    key: "memory",
+    icon: "MemoryStick",
+    texts: [formatPercent(ram)],
+    spoken: `memory ${formatPercent(ram)}${memory.pressure ? `, memory pressure ${memory.pressure}` : ""}`,
+    percent: ram,
+    severity: memorySeverity(memory),
+  });
+  if (disks.length > 0) percent("disk", "HardDrive", "disk", sumDisks(disks).percent);
   if (network) {
     metrics.push({
       key: "network",
       icon: "ArrowDownUp",
       texts: [formatCompactRate(current.rxBytesPerSec), formatCompactRate(current.txBytesPerSec)],
+      spoken: `download ${formatRate(current.rxBytesPerSec)}, upload ${formatRate(current.txBytesPerSec)}`,
+    });
+  }
+  if (current.gpuPercent !== null) percent("gpu", "Gpu", "GPU", current.gpuPercent);
+  // Several GPUs: the hottest card, and video memory added together.
+  if (current.gpuTemperatureCelsius !== null) {
+    temperature("gpuTemp", "GPU temperature", current.gpuTemperatureCelsius);
+  }
+  if (current.vramPercent !== null) percent("vram", "Microchip", "video memory", current.vramPercent);
+  if (current.gpuWatts !== null) {
+    metrics.push({
+      key: "gpuPower",
+      icon: "Zap",
+      texts: [formatWatts(current.gpuWatts)],
+      spoken: `GPU power ${Math.round(current.gpuWatts)} watts`,
     });
   }
   return metrics;
 }
 
-// The widest text a slot can hold: rounded percents top out at 100%, compact rates at 4 characters.
-const SLOT_TEMPLATES = ["100%", "888K", "8.8M"];
+// The widest text a slot can hold: rounded percents top out at 100%, compact rates and GPU watts
+// at 4 characters, temperatures at 100°.
+const SLOT_TEMPLATES = ["100%", "888K", "8.8M", "888W", "100°"];
 // Used until the templates are measured.
 const ESTIMATED_SLOT_WIDTH = FONT_SIZE * 2.6;
 const TEXT_GAP = 4;
@@ -214,29 +251,18 @@ function triggerStyle(theme: PluginTheme) {
   });
 }
 
-function describe(stats: HostStats): string {
-  const { current, memory, network, disks } = stats;
-  const parts = [
-    `CPU ${formatPercent(current.cpuPercent)}`,
-    `memory ${formatPercent(memoryPercent(memory))}`,
-  ];
-  if (memory.pressure) parts.push(`memory pressure ${memory.pressure}`);
-  if (disks.length > 0) parts.push(`disk ${formatPercent(sumDisks(disks).percent)}`);
-  if (network) {
-    parts.push(
-      `download ${formatRate(current.rxBytesPerSec)}`,
-      `upload ${formatRate(current.txBytesPerSec)}`,
-    );
-  }
-  return `Host status: ${parts.join(", ")}`;
+/** The line read aloud; it names only the metrics the line shows. */
+function describe(metrics: readonly Metric[]): string {
+  return `Host status: ${metrics.map((metric) => metric.spoken).join(", ")}`;
 }
 
 function layoutWidth(event: LayoutChangeEvent): number {
   return event.nativeEvent.layout.width;
 }
 
-export function HostStatusItem({ theme, openPopover }: PluginSidebarItemProps) {
+export function HostStatusItem({ theme, host, openPopover }: PluginSidebarItemProps) {
   const { data } = useHostStats();
+  const settings = useSettings(displaySettings);
   const [available, setAvailable] = useState<number | null>(null);
   const [measuredSlot, setMeasuredSlot] = useState<number | null>(null);
   const onAvailable = useCallback((e: LayoutChangeEvent) => setAvailable(layoutWidth(e)), []);
@@ -245,16 +271,20 @@ export function HostStatusItem({ theme, openPopover }: PluginSidebarItemProps) {
     setMeasuredSlot((current) => Math.max(current ?? 0, width));
   }, []);
 
-  // Like the built-in usage summary: nothing until there is something to show.
-  if (!data) return null;
-  const metrics = metricsOf(data);
+  // Like the built-in usage summary: nothing until there is something to show. Settings that
+  // cannot be read hide nothing.
+  if (!data || settings.status === "loading") return null;
+  const hidden: readonly MetricKey[] =
+    settings.status === "ready" ? hiddenMetrics(settings.values, host.id) : [];
+  const metrics = metricsOf(data).filter((metric) => !hidden.includes(metric.key));
+  if (metrics.length === 0) return null;
   const slotWidth = measuredSlot ?? ESTIMATED_SLOT_WIDTH;
   const layout = chooseLayout(available, metrics, slotWidth);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={describe(data)}
+      accessibilityLabel={describe(metrics)}
       onPress={() => openPopover(HostPopover)}
       style={triggerStyle(theme)}
     >
@@ -389,7 +419,90 @@ function DiskSection({ theme, disks }: { theme: PluginTheme; disks: HostStats["d
   );
 }
 
-function HostPopover({ theme, layout }: PluginPopoverProps) {
+/** Power, VRAM and temperature of each GPU, one line per card. */
+function gpuDetail(gpu: GpuUsage): string {
+  const parts: string[] = [];
+  if (gpu.powerWatts !== null) {
+    parts.push(
+      gpu.powerLimitWatts === null
+        ? `${gpu.powerWatts.toFixed(0)} W`
+        : `${gpu.powerWatts.toFixed(0)} / ${gpu.powerLimitWatts.toFixed(0)} W`,
+    );
+  }
+  if (gpu.memoryUsedBytes !== null && gpu.memoryTotalBytes !== null) {
+    parts.push(`VRAM ${formatBytes(gpu.memoryUsedBytes)} / ${formatBytes(gpu.memoryTotalBytes)}`);
+  }
+  if (gpu.temperatureCelsius !== null) parts.push(`${gpu.temperatureCelsius} °C`);
+  return parts.join(" · ");
+}
+
+function GpuSection({ theme, stats }: { theme: PluginTheme; stats: HostStats }) {
+  const { current, history, gpus } = stats;
+  const powerLimit = gpus.reduce((sum, gpu) => sum + (gpu.powerLimitWatts ?? 0), 0);
+  const single = gpus.length === 1 ? gpus[0] : undefined;
+  const vram = sumGpuMemory(gpus);
+  return (
+    <>
+      {current.gpuPercent !== null ? (
+        <PreviewRow
+          theme={theme}
+          icon="Gpu"
+          label={single ? `GPU · ${single.name}` : `GPU · ${gpus.length} GPUs`}
+          value={formatPercent(current.gpuPercent)}
+          color={loadColor(theme, current.gpuPercent)}
+          values={history.map((s) => s.gpuPercent ?? 0)}
+        />
+      ) : null}
+      {!single
+        ? gpus.map((gpu, index) => (
+            <Caption key={index} theme={theme} text={`${gpu.name}: ${gpuDetail(gpu)}`} />
+          ))
+        : null}
+      {current.gpuTemperatureCelsius !== null ? (
+        <PreviewRow
+          theme={theme}
+          icon="Thermometer"
+          label={single ? "GPU temperature" : "GPU temperature · hottest"}
+          value={`${Math.round(current.gpuTemperatureCelsius)} °C`}
+          color={severityColor(theme, temperatureSeverity(current.gpuTemperatureCelsius))}
+          // Degrees on a 0-100 scale, like the CPU temperature.
+          values={history.map((s) => s.gpuTemperatureCelsius ?? 0)}
+        />
+      ) : null}
+      {current.vramPercent !== null ? (
+        <PreviewRow
+          theme={theme}
+          icon="Microchip"
+          label={vram ? `VRAM · ${formatBytes(vram.usedBytes)} / ${formatBytes(vram.totalBytes)}` : "VRAM"}
+          value={formatPercent(current.vramPercent)}
+          color={loadColor(theme, current.vramPercent)}
+          values={history.map((s) => s.vramPercent ?? 0)}
+        />
+      ) : null}
+      {current.gpuWatts !== null ? (
+        <PreviewRow
+          theme={theme}
+          icon="Zap"
+          label={powerLimit > 0 ? `GPU power · limit ${powerLimit.toFixed(0)} W` : "GPU power"}
+          value={`${current.gpuWatts.toFixed(0)} W`}
+          color={theme.colors.accent}
+          // Against the power limit, so a card at its limit fills the chart; else against the peak.
+          values={
+            powerLimit > 0
+              ? history.map((s) => ((s.gpuWatts ?? 0) / powerLimit) * 100)
+              : scaleToPeak(history, (s) => s.gpuWatts ?? 0)
+          }
+        />
+      ) : null}
+    </>
+  );
+}
+
+function HostPopover({
+  theme,
+  layout,
+  openScreen,
+}: PluginPopoverProps) {
   const { data } = useHostStats();
   const rootStyle = {
     gap: 10,
@@ -410,7 +523,20 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
   return (
     <View style={rootStyle}>
       <View style={{ gap: 2 }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: FONT_SIZE + 1 }}>{data.hostname}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: ICON_GAP }}>
+          <Text style={{ flex: 1, color: theme.colors.foreground, fontSize: FONT_SIZE + 1 }}>
+            {data.hostname}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Choose what the sidebar shows for this host"
+            hitSlop={8}
+            // openScreen closes the popover, and on a phone the sidebar drawer.
+            onPress={() => openScreen({ screenId: "display" })}
+          >
+            <Icon name="SlidersHorizontal" size={ICON_SIZE} color={theme.colors.foregroundMuted} />
+          </Pressable>
+        </View>
         <Text style={{ color: theme.colors.foregroundMuted, fontSize: FONT_SIZE - 1 }}>
           up {formatUptime(data.uptimeSeconds)} · load{" "}
           {data.loadAverage.map((n) => n.toFixed(2)).join(" ")}
@@ -424,6 +550,17 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
         color={loadColor(theme, current.cpuPercent)}
         values={history.map((s) => s.cpuPercent)}
       />
+      {current.cpuTemperatureCelsius !== null ? (
+        <PreviewRow
+          theme={theme}
+          icon="Thermometer"
+          label="CPU temperature"
+          value={`${Math.round(current.cpuTemperatureCelsius)} °C`}
+          color={severityColor(theme, temperatureSeverity(current.cpuTemperatureCelsius))}
+          // Degrees on a 0-100 scale: a CPU near its throttle point fills the chart.
+          values={history.map((s) => s.cpuTemperatureCelsius ?? 0)}
+        />
+      ) : null}
       <PreviewRow
         theme={theme}
         icon="MemoryStick"
@@ -453,6 +590,7 @@ function HostPopover({ theme, layout }: PluginPopoverProps) {
           />
         </>
       ) : null}
+      {data.gpus.length > 0 ? <GpuSection theme={theme} stats={data} /> : null}
       {disks.length > 0 ? <DiskSection theme={theme} disks={disks} /> : null}
     </View>
   );
