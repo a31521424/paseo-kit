@@ -1,11 +1,18 @@
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import os from "node:os";
 import { promisify } from "node:util";
 import type { RpcOutput } from "@getpaseo/plugin";
 import type { hostStatsRpc } from "../shared/stats";
-import type { DiskUsage, HostSample, MemoryPressure, MemoryUsage } from "../shared/stats";
+import {
+  sumGpuMemory,
+  type DiskUsage,
+  type GpuUsage,
+  type HostSample,
+  type MemoryPressure,
+  type MemoryUsage,
+} from "../shared/stats";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,6 +28,25 @@ const IGNORED_DISK_FS = new Set(["squashfs", "iso9660", "udf", "erofs"]);
 const MAC_COMMAND_TIMEOUT_MS = 1500;
 // kern.memorystatus_vm_pressure_level, as defined by the kernel's kVMPressure* constants.
 const MAC_PRESSURE_LEVELS: Record<string, MemoryPressure> = { "1": "normal", "2": "warning", "4": "critical" };
+// nvidia-smi answers in about 40 ms. A hung driver must not hold up the sample either: past this
+// the call is killed, and its last reading no longer counts as current.
+const GPU_COMMAND_TIMEOUT_MS = 1500;
+// The first sample waits this long at most for vm_stat and nvidia-smi. A process stuck in the
+// kernel outlives even SIGKILL, so the wait cannot rely on the command ending.
+const FIRST_SAMPLE_WAIT_MS = GPU_COMMAND_TIMEOUT_MS + 250;
+const NVIDIA_SMI_ARGS = [
+  "--query-gpu=name,utilization.gpu,power.draw,power.limit,memory.used,memory.total,temperature.gpu",
+  "--format=csv,noheader,nounits",
+];
+const MIB = 1024 * 1024;
+// hwmon chips that measure the CPU itself, with the sensor labels to prefer, best first. Without a
+// matching label the chip's first sensor is taken.
+const CPU_SENSOR_LABELS: Record<string, readonly string[]> = {
+  coretemp: ["Package id 0"], // Intel
+  k10temp: ["Tdie", "Tctl"], // AMD; Tctl carries an offset on some models, Tdie does not
+  zenpower: ["Tdie", "Tctl"],
+  cpu_thermal: [], // Raspberry Pi and other ARM boards
+};
 
 interface CpuTimes {
   idle: number;
@@ -148,6 +174,101 @@ async function readMacMemory(): Promise<MemoryUsage | null> {
   return memory ? { ...memory, pressure } : null;
 }
 
+/**
+ * One GPU per line: name, then utilization %, power draw and limit in W, memory used and total in
+ * MiB, temperature in °C. A card that lacks a reading prints "[N/A]" (or "[Not Supported]"), which
+ * becomes null. The numbers are taken from the end, so a comma in the name cannot shift them.
+ */
+export function parseNvidiaSmi(output: string): GpuUsage[] {
+  const gpus: GpuUsage[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const fields = line.split(",").map((field) => field.trim());
+    if (fields.length < 7) continue;
+    const [utilization, power, limit, used, total, temperature] = fields.slice(-6).map((field) => {
+      const value = field === "" ? NaN : Number(field);
+      return Number.isFinite(value) ? value : null;
+    });
+    const mib = (value: number | null | undefined) => (value == null ? null : value * MIB);
+    gpus.push({
+      name: fields.slice(0, -6).join(", "),
+      utilizationPercent: utilization ?? null,
+      powerWatts: power ?? null,
+      powerLimitWatts: limit ?? null,
+      memoryUsedBytes: mib(used),
+      memoryTotalBytes: mib(total),
+      temperatureCelsius: temperature ?? null,
+    });
+  }
+  return gpus;
+}
+
+/**
+ * NVIDIA GPUs from nvidia-smi, run without a shell. Null when the host has no nvidia-smi, so the
+ * sampler stops asking; an empty list when it runs but finds no GPU or fails.
+ */
+async function readNvidiaGpus(): Promise<GpuUsage[] | null> {
+  try {
+    const { stdout } = await execFileAsync("nvidia-smi", NVIDIA_SMI_ARGS, {
+      timeout: GPU_COMMAND_TIMEOUT_MS,
+      // A process that ignores SIGTERM must not live on.
+      killSignal: "SIGKILL",
+      windowsHide: true,
+    });
+    return parseNvidiaSmi(stdout);
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? null : [];
+  }
+}
+
+function readText(path: string): string | null {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
+function listDir(path: string): string[] {
+  try {
+    return readdirSync(path).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Linux: the sysfs file that holds the CPU temperature in millidegrees, or null when the host
+ * exposes none (Windows, macOS, most VMs). Looked up once; reading it is a plain file read.
+ * Prefers the CPU's hwmon chip, else a thermal zone for the CPU package.
+ */
+export function findCpuTemperatureFile(sysClass = "/sys/class"): string | null {
+  // ponytail: on a multi-socket host this takes the first CPU only.
+  for (const chip of listDir(`${sysClass}/hwmon`)) {
+    const dir = `${sysClass}/hwmon/${chip}`;
+    const labels = CPU_SENSOR_LABELS[readText(`${dir}/name`) ?? ""];
+    if (!labels) continue;
+    const inputs = listDir(dir).filter((file) => /^temp\d+_input$/.test(file));
+    for (const label of labels) {
+      const input = inputs.find((file) => readText(`${dir}/${file.replace("_input", "_label")}`) === label);
+      if (input) return `${dir}/${input}`;
+    }
+    if (inputs.includes("temp1_input")) return `${dir}/temp1_input`;
+  }
+  for (const zone of listDir(`${sysClass}/thermal`)) {
+    if (!zone.startsWith("thermal_zone")) continue;
+    const type = readText(`${sysClass}/thermal/${zone}/type`) ?? "";
+    if (type === "x86_pkg_temp" || /cpu/i.test(type)) return `${sysClass}/thermal/${zone}/temp`;
+  }
+  return null;
+}
+
+/** °C from a sysfs file in millidegrees; null when it cannot be read (a sensor can fail with EIO). */
+export function readCpuTemperature(file: string): number | null {
+  const text = readText(file);
+  const value = text === null || text === "" ? NaN : Number(text) / 1000;
+  return Number.isFinite(value) ? value : null;
+}
+
 function readNetworkTotals(): NetworkTotals | null {
   let raw: string;
   try {
@@ -234,7 +355,25 @@ async function readDisks(): Promise<DiskUsage[]> {
 
 export type HostStats = RpcOutput<typeof hostStatsRpc>;
 
-export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
+/** Resolves when `work` settles or after `ms`, whichever comes first. */
+function settleWithin(work: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    work.then(done, done);
+  });
+}
+
+/** `readGpus` stands in for nvidia-smi in tests. */
+export function startSampler({
+  readGpus = readNvidiaGpus,
+}: { readGpus?: () => Promise<GpuUsage[] | null> } = {}): {
+  read(): Promise<HostStats>;
+  stop(): void;
+} {
   const isMac = process.platform === "darwin";
   const history: HostSample[] = [];
   let previousCpu = readCpuTimes();
@@ -246,6 +385,12 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
   let macMemory: MemoryUsage | null = null;
   let macMemoryRead: Promise<void> | null = null;
   let memory = readMemory();
+  // macOS has no NVIDIA driver; elsewhere a missing nvidia-smi turns this off for good.
+  let gpuAvailable = !isMac;
+  let gpus: GpuUsage[] = [];
+  let gpuRead: Promise<void> | null = null;
+  let gpuReadStartedAt = 0;
+  const cpuTemperatureFile = findCpuTemperatureFile();
 
   // vm_stat runs as a separate process, so each tick uses the reading the previous one started.
   const refreshMacMemory = () => {
@@ -259,6 +404,24 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
     return macMemoryRead;
   };
 
+  // Like vm_stat: each tick uses the reading the previous one started.
+  const refreshGpus = () => {
+    if (!gpuAvailable) return Promise.resolve();
+    // ponytail: a call that never ends (stuck in the kernel) stops GPU sampling until the plugin
+    // reloads; starting more would only pile up stuck processes.
+    if (gpuRead) return gpuRead;
+    gpuReadStartedAt = Date.now();
+    gpuRead = readGpus()
+      .then((next) => {
+        if (next === null) gpuAvailable = false;
+        gpus = next ?? [];
+      })
+      .finally(() => {
+        gpuRead = null;
+      });
+    return gpuRead;
+  };
+
   const tick = () => {
     const now = Date.now();
     const cpu = readCpuTimes();
@@ -268,6 +431,14 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
     const idleDelta = cpu.idle - previousCpu.idle;
     if (isMac) void refreshMacMemory();
     memory = macMemory ?? readMemory();
+    // A call still running past its timeout means the last reading is stale.
+    if (gpuRead && now - gpuReadStartedAt > GPU_COMMAND_TIMEOUT_MS) gpus = [];
+    void refreshGpus();
+    const utilizations = gpus.flatMap((gpu) => gpu.utilizationPercent ?? []);
+    const watts = gpus.flatMap((gpu) => gpu.powerWatts ?? []);
+    const temperatures = gpus.flatMap((gpu) => gpu.temperatureCelsius ?? []);
+    const vram = sumGpuMemory(gpus);
+    const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
     const sample: HostSample = {
       at: now,
@@ -275,6 +446,13 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
       memoryPercent: (memory.usedBytes / memory.totalBytes) * 100,
       rxBytesPerSec: net && previousNet ? Math.max(net.rx - previousNet.rx, 0) / seconds : 0,
       txBytesPerSec: net && previousNet ? Math.max(net.tx - previousNet.tx, 0) / seconds : 0,
+      cpuTemperatureCelsius: cpuTemperatureFile ? readCpuTemperature(cpuTemperatureFile) : null,
+      // ponytail: several GPUs share one history line (average load, total power); per-GPU history
+      // if a multi-GPU host needs it.
+      gpuPercent: utilizations.length > 0 ? sum(utilizations) / utilizations.length : null,
+      gpuWatts: watts.length > 0 ? sum(watts) : null,
+      gpuTemperatureCelsius: temperatures.length > 0 ? Math.max(...temperatures) : null,
+      vramPercent: vram ? (vram.usedBytes / vram.totalBytes) * 100 : null,
     };
     history.push(sample);
     if (history.length > HISTORY_LENGTH) history.shift();
@@ -298,8 +476,12 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
       });
   };
 
-  // On macOS the first sample waits for vm_stat, so the history does not open with os.freemem's figure.
-  const firstSample = isMac ? refreshMacMemory().then(tick) : Promise.resolve(tick());
+  // The first sample waits for vm_stat on macOS, so the history does not open with os.freemem's
+  // figure, and for nvidia-smi, so it does not open without the GPU; neither may hold it up.
+  const firstSample = settleWithin(
+    Promise.all([isMac ? refreshMacMemory() : null, refreshGpus()]),
+    FIRST_SAMPLE_WAIT_MS,
+  ).then(tick);
   refreshDisks();
   const timer = setInterval(tick, SAMPLE_INTERVAL_MS);
   const diskTimer = setInterval(refreshDisks, DISK_INTERVAL_MS);
@@ -322,6 +504,7 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
           ? { rxTotalBytes: networkTotals.rx, txTotalBytes: networkTotals.tx }
           : null,
         disks,
+        gpus,
         sampleIntervalMs: SAMPLE_INTERVAL_MS,
         current: current ?? {
           at: Date.now(),
@@ -329,6 +512,11 @@ export function startSampler(): { read(): Promise<HostStats>; stop(): void } {
           memoryPercent: 0,
           rxBytesPerSec: 0,
           txBytesPerSec: 0,
+          cpuTemperatureCelsius: null,
+          gpuPercent: null,
+          gpuWatts: null,
+          gpuTemperatureCelsius: null,
+          vramPercent: null,
         },
         history: [...history],
       };

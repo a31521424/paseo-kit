@@ -7,6 +7,27 @@ const sampleSchema = z.object({
   memoryPercent: z.number(),
   rxBytesPerSec: z.number(),
   txBytesPerSec: z.number(),
+  /** Linux: the CPU package sensor in °C; null where the host exposes none (Windows, macOS, most VMs). */
+  cpuTemperatureCelsius: z.number().nullable(),
+  /** All NVIDIA GPUs averaged; null on a host without one. */
+  gpuPercent: z.number().nullable(),
+  /** Power draw of all NVIDIA GPUs added together; null when there is none or it reports none. */
+  gpuWatts: z.number().nullable(),
+  /** The hottest NVIDIA GPU in °C; null when there is none or it reports none. */
+  gpuTemperatureCelsius: z.number().nullable(),
+  /** Video memory of all NVIDIA GPUs added together, as a percent of their total; null without one. */
+  vramPercent: z.number().nullable(),
+});
+
+/** One NVIDIA GPU as nvidia-smi reports it; a field the card does not report is null. */
+const gpuSchema = z.object({
+  name: z.string(),
+  utilizationPercent: z.number().nullable(),
+  powerWatts: z.number().nullable(),
+  powerLimitWatts: z.number().nullable(),
+  memoryUsedBytes: z.number().nullable(),
+  memoryTotalBytes: z.number().nullable(),
+  temperatureCelsius: z.number().nullable(),
 });
 
 const diskSchema = z.object({
@@ -44,13 +65,28 @@ export const hostStatsRpc = defineRpc({
       .object({ rxTotalBytes: z.number(), txTotalBytes: z.number() })
       .nullable(),
     disks: z.array(diskSchema),
+    /** Empty when the host has no NVIDIA GPU or no nvidia-smi. */
+    gpus: z.array(gpuSchema),
     sampleIntervalMs: z.number(),
     current: sampleSchema,
     history: z.array(sampleSchema),
   }),
 });
 
+/** Video memory of the GPUs that report it, added together; null when none does. */
+export function sumGpuMemory(gpus: readonly GpuUsage[]): { usedBytes: number; totalBytes: number } | null {
+  let usedBytes = 0;
+  let totalBytes = 0;
+  for (const gpu of gpus) {
+    if (gpu.memoryUsedBytes === null || !gpu.memoryTotalBytes) continue;
+    usedBytes += gpu.memoryUsedBytes;
+    totalBytes += gpu.memoryTotalBytes;
+  }
+  return totalBytes > 0 ? { usedBytes, totalBytes } : null;
+}
+
 export type HostSample = z.infer<typeof sampleSchema>;
+export type GpuUsage = z.infer<typeof gpuSchema>;
 export type DiskUsage = z.infer<typeof diskSchema>;
 export type MemoryUsage = z.infer<typeof memorySchema>;
 export type MemoryPressure = NonNullable<MemoryUsage["pressure"]>;

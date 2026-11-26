@@ -2,7 +2,7 @@
   "name": "host-monitor",
   "private": true,
   "version": "0.0.0",
-  "description": "CPU, memory, disk and network usage of the daemon host in the sidebar footer",
+  "description": "CPU, memory, disk, network and NVIDIA GPU usage and temperatures of the daemon host in the sidebar footer",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -22,10 +22,11 @@
     "assets/"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs --test test/*.test.ts"
   },
   "devDependencies": {
-    "@getpaseo/plugin": "0.11.1",
+    "@getpaseo/plugin": "0.17.4",
     "@tanstack/react-query": "^5.90.11",
     "@types/node": "^22.0.0",
     "@types/react": "~19.2.0",

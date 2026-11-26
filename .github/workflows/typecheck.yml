@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Unit tests
-        if: matrix.plugin == 'ccusage-stats'
+        if: matrix.plugin == 'ccusage-stats' || matrix.plugin == 'host-monitor'
         run: npm test
       - name: Mobile audit (client/)
         run: |

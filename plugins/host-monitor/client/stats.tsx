@@ -37,6 +37,13 @@ export function severityColor(theme: PluginTheme, severity: Severity): string {
   return theme.colors.foregroundMuted;
 }
 
+/** CPUs and GPUs throttle near 100 °C; most run well below 80 under load. */
+export function temperatureSeverity(celsius: number): Severity {
+  if (celsius >= 90) return "critical";
+  if (celsius >= 80) return "warning";
+  return "normal";
+}
+
 export function loadColor(theme: PluginTheme, percent: number): string {
   return severityColor(theme, percentSeverity(percent));
 }
