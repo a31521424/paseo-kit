@@ -1,6 +1,6 @@
 # host-monitor
 
-CPU, memory, disk and network usage of the daemon host in the sidebar footer.
+CPU, memory, disk and network usage of the daemon host in the sidebar footer. A separate Latency line shows round-trip time through Paseo plugin RPC, with recent history and failure details on press.
 
 See [OVERVIEW.md](OVERVIEW.md) for what it shows, how it works and its limits.
 
@@ -23,6 +23,7 @@ Requires Paseo 0.11.1 or later with plugins enabled on the daemon.
 
 ```bash
 npm run typecheck
+node --test test/latency.test.mjs
 paseo plugin reload host-monitor
 paseo plugin logs host-monitor
 ```

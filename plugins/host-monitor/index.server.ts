@@ -1,7 +1,7 @@
 import v8 from "node:v8";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { startSampler } from "./server/sampler";
-import { hostStatsRpc } from "./shared/stats";
+import { hostPingRpc, hostStatsRpc } from "./shared/stats";
 
 // The plugin process validates every daemon message with one generated function of about 11 MB
 // (`safeParse_WSOutboundMessageSchema` in @getpaseo/protocol). Once it is hot, V8's Maglev compiler
@@ -14,5 +14,6 @@ v8.setFlagsFromString("--no-maglev");
 export default function contribute(server: PluginServerContext) {
   const sampler = startSampler();
   server.handle(hostStatsRpc, () => sampler.read());
+  server.handle(hostPingRpc, () => ({}));
   return () => sampler.stop();
 }

@@ -200,7 +200,7 @@ function chooseLayout(available: number | null, metrics: readonly Metric[], slot
   return { shown, meters: false };
 }
 
-function triggerStyle(theme: PluginTheme) {
+export function triggerStyle(theme: PluginTheme) {
   return ({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => ({
     width: "100%" as const,
     flexDirection: "row" as const,
