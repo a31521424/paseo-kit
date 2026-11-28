@@ -50,6 +50,13 @@ export const hostStatsRpc = defineRpc({
   }),
 });
 
+/** Answers at once; the app times the plugin RPC round trip to this host. */
+export const hostPingRpc = defineRpc({
+  name: "host.ping",
+  input: z.object({}),
+  output: z.object({}),
+});
+
 export type HostSample = z.infer<typeof sampleSchema>;
 export type DiskUsage = z.infer<typeof diskSchema>;
 export type MemoryUsage = z.infer<typeof memorySchema>;

@@ -120,8 +120,8 @@ export function Meter({
 }
 
 interface SparklineProps {
-  /** Values on a 0-100 scale, oldest first. */
-  values: readonly number[];
+  /** Values on a 0-100 scale, oldest first; null leaves a gap. */
+  values: readonly (number | null)[];
   color: string;
   height: number;
 }
@@ -134,7 +134,7 @@ export function Sparkline({ values, color, height }: SparklineProps) {
           key={index}
           style={{
             flex: 1,
-            height: Math.max(1, (Math.min(value, 100) / 100) * height),
+            height: value === null ? 0 : Math.max(1, (Math.min(value, 100) / 100) * height),
             backgroundColor: color,
             opacity: 0.6,
           }}
